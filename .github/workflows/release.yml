@@ -1,0 +1,140 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: '版本类型'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Bump version (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        id: bump_version
+        run: |
+          VERSION_TYPE=${{ github.event.inputs.version_type }}
+          CURRENT_VERSION=${{ steps.current_version.outputs.version }}
+
+          # 解析版本号
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          # 根据类型更新版本
+          case $VERSION_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          # 更新 package.json
+          npm version $NEW_VERSION --no-git-tag-version
+
+          # 更新 App.jsx 中的 version 字段
+          sed -i "s/version: 'v[0-9]*\.[0-9]*\.*[0-9]*'/version: 'v$NEW_VERSION'/g" App.jsx
+
+      - name: Get version for tag trigger
+        if: github.event_name == 'push'
+        id: tag_version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "new_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set final version
+        id: final_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ steps.bump_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.tag_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Create dist zip
+        run: |
+          cd dist
+          zip -r ../binance-alpha-tool-v${{ steps.final_version.outputs.version }}.zip .
+          cd ..
+
+      - name: Commit version bump (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add package.json App.jsx
+          git commit -m "chore: bump version to v${{ steps.final_version.outputs.version }}"
+          git tag "v${{ steps.final_version.outputs.version }}"
+          git push origin main --tags
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.final_version.outputs.version }}
+          name: Release v${{ steps.final_version.outputs.version }}
+          body: |
+            ## 币安Alpha助手 v${{ steps.final_version.outputs.version }}
+
+            ### 更新内容
+            - 自动构建发布
+
+            ### 安装说明
+            1. 下载 `binance-alpha-tool-v${{ steps.final_version.outputs.version }}.zip`
+            2. 解压到任意目录
+            3. 在浏览器扩展页面开启开发者模式
+            4. 加载解压后的文件夹
+          files: |
+            binance-alpha-tool-v${{ steps.final_version.outputs.version }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

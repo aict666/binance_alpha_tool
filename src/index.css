@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* 引入思源黑体 (Noto Sans SC) - 跨平台中文字体 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+/* 隐藏滚动条 */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+}
+
+/* Content script 悬浮窗样式 */
+#app-root {
+  /* Mac 优先使用 PingFang，Windows/Linux 回退到 Noto Sans SC */
+  font-family: "PingFang SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

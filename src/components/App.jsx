@@ -1,0 +1,759 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Cog6ToothIcon, PlusIcon, TrashIcon, BoltIcon, ChartBarIcon, CalculatorIcon, StarIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
+import { executeFill, executeQuickSell } from '../content/fill-logic';
+import {
+  collectOrdersFromTable,
+  detectAirdrops,
+  calculateStats,
+  calculateLoss,
+  calculateTodayScore
+} from '../content/score-calculator';
+
+const translations = {
+  zh: {
+    title: '币安Alpha助手',
+    lossCalcTitle: '今日损耗计算',
+    offsetLabel: '价格偏移 (Ticks)',
+    offsetDesc: '计算限价: 当前价 ± (步长 × {offset})',
+    qtyLabel: '数量预设',
+    addQtyPlaceholder: '添加数量...',
+    autoFill: '自动填充',
+    autoSubmit: '自动买入',
+    autoSubmitDesc: '警告: 填充后立即点击买入按钮',
+    executing: '执行中...',
+    success: '成功!',
+    errorApi: '错误: Chrome API 不可用',
+    errorTab: '错误: 无活动标签页',
+    errorRefresh: '错误: 请刷新页面?',
+    failed: '失败',
+    reverseOrderNotFound: '未找到"反向订单"选项',
+    reverseOrderNotChecked: '请先勾选"反向订单"选项',
+    sellInputNotFound: '未找到卖出价格输入框',
+    version: 'v1.1.0',
+    // Tabs
+    tabFill: '反向订单',
+    tabScore: '刷分',
+    // Score tab
+    statsTitle: '今日交易统计',
+    buyTotal: '买入总额',
+    sellTotal: '卖出总额',
+    txUnit: '笔',
+    lossTitle: '今日损耗',
+    scoreTitle: '今日得分',
+    scoreFormula: '总买入×4: 2U=1分, 4U=2分, 8U=3分...',
+    formula: '(买入 - 卖出 + 空投) × 2',
+    calcScore: '计算刷分',
+    calculating: '计算中...',
+    recalculate: '重新计算',
+    noOrders: '未找到今日订单',
+    tableNotFound: '未找到订单历史表格',
+    airdropDeducted: '空投已扣除',
+    // Target score
+    targetScoreLabel: '刷分目标',
+    targetScoreDesc: '目标金额: {amount} USDT',
+    autoPreset: '自动',
+    targetReached: '已达标',
+    // Quick sell
+    quickSell: '快速卖出',
+    quickSellExecuting: '卖出中...',
+    quickSellSuccess: '卖出成功!',
+    sellTabNotFound: '未找到卖出标签页',
+    priceNotFound: '未找到当前价格',
+    amountDivNotFound: '未找到持仓数量',
+    sellButtonNotFound: '未找到卖出按钮'
+  },
+  en: {
+    title: 'Binance Alpha Assistant',
+    lossCalcTitle: 'Daily Loss Calculator',
+    offsetLabel: 'Price Offset (Ticks)',
+    offsetDesc: 'Calculates limit price: Current ± (Step × {offset})',
+    qtyLabel: 'Quantity Preset',
+    addQtyPlaceholder: 'Add qty...',
+    autoFill: 'AUTO FILL',
+    autoSubmit: 'Auto Buy',
+    autoSubmitDesc: 'Warning: Clicks Buy immediately',
+    executing: 'Executing...',
+    success: 'Success!',
+    errorApi: 'Error: Chrome API not available',
+    errorTab: 'Error: No active tab',
+    errorRefresh: 'Error: Refresh page?',
+    failed: 'Failed',
+    reverseOrderNotFound: '"Reverse Order" option not found',
+    reverseOrderNotChecked: 'Please enable "Reverse Order" first',
+    sellInputNotFound: 'Sell price input not found',
+    version: 'v1.1.0',
+    // Tabs
+    tabFill: 'Reverse Order',
+    tabScore: 'Score',
+    // Score tab
+    statsTitle: 'Today\'s Trading Stats',
+    buyTotal: 'Buy Total',
+    sellTotal: 'Sell Total',
+    txUnit: 'tx',
+    lossTitle: 'Today\'s Loss',
+    scoreTitle: 'Today\'s Score',
+    scoreFormula: 'Total buy×4: 2U=1pt, 4U=2pt, 8U=3pt...',
+    formula: '(Buy - Sell + Airdrop) × 2',
+    calcScore: 'Calculate Score',
+    calculating: 'Calculating...',
+    recalculate: 'Recalculate',
+    noOrders: 'No orders found today',
+    tableNotFound: 'Order history table not found',
+    airdropDeducted: 'Airdrop deducted',
+    // Target score
+    targetScoreLabel: 'Score Target',
+    targetScoreDesc: 'Target amount: {amount} USDT',
+    autoPreset: 'Auto',
+    targetReached: 'Reached',
+    // Quick sell
+    quickSell: 'Quick Sell',
+    quickSellExecuting: 'Selling...',
+    quickSellSuccess: 'Sold!',
+    sellTabNotFound: 'Sell tab not found',
+    priceNotFound: 'Price not found',
+    amountDivNotFound: 'Holdings not found',
+    sellButtonNotFound: 'Sell button not found'
+  }
+};
+
+const DEFAULT_SETTINGS = {
+  offsetTicks: 3,
+  selectedQuantity: 1024,
+  presets: [
+    { id: '1', value: 512 },
+    { id: '2', value: 1024 },
+    { id: '3', value: 1024.1 },
+  ],
+  language: 'zh',
+  autoSubmit: false,
+  targetScore: 16
+};
+
+export { translations };
+
+const App = ({ currentLanguage }) => {
+  const [offset, setOffset] = useState(DEFAULT_SETTINGS.offsetTicks);
+  const [quantity, setQuantity] = useState(DEFAULT_SETTINGS.selectedQuantity);
+  const [presets, setPresets] = useState(DEFAULT_SETTINGS.presets);
+  const [language, setLanguage] = useState(currentLanguage || DEFAULT_SETTINGS.language);
+  const [autoSubmit, setAutoSubmit] = useState(DEFAULT_SETTINGS.autoSubmit || false);
+  const [newPresetVal, setNewPresetVal] = useState('');
+  const [status, setStatus] = useState('');
+  const [quickSellStatus, setQuickSellStatus] = useState('');
+
+  // Target score related state
+  const [targetScore, setTargetScore] = useState(DEFAULT_SETTINGS.targetScore);
+  const [autoAmount, setAutoAmount] = useState(null);
+  const [isAutoMode, setIsAutoMode] = useState(false);
+
+  // Tabs state
+  const [activeTab, setActiveTab] = useState('fill'); // 'fill' | 'score'
+
+  // Score tab state
+  const [scoreStatus, setScoreStatus] = useState('idle'); // idle | loading | done | error
+  const [orders, setOrders] = useState([]);
+  const [airdrops, setAirdrops] = useState([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Helper for translations
+  const t = (key) => translations[language][key];
+
+  // Load settings from storage on mount
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
+      chrome.storage.local.get(['tradeAssistSettings'], (result) => {
+        if (result.tradeAssistSettings) {
+          const s = result.tradeAssistSettings;
+          setOffset(s.offsetTicks ?? DEFAULT_SETTINGS.offsetTicks);
+          setQuantity(s.selectedQuantity ?? DEFAULT_SETTINGS.selectedQuantity);
+          setPresets(s.presets ?? DEFAULT_SETTINGS.presets);
+          setLanguage(s.language ?? DEFAULT_SETTINGS.language);
+          setAutoSubmit(s.autoSubmit ?? DEFAULT_SETTINGS.autoSubmit ?? false);
+          setTargetScore(s.targetScore ?? DEFAULT_SETTINGS.targetScore);
+        }
+      });
+    }
+  }, []);
+
+  // Save settings helper
+  const saveSettings = useCallback((newSettings) => {
+    const currentSettings = {
+      offsetTicks: newSettings.offsetTicks ?? offset,
+      selectedQuantity: newSettings.selectedQuantity ?? quantity,
+      presets: newSettings.presets ?? presets,
+      language: newSettings.language ?? language,
+      autoSubmit: newSettings.autoSubmit ?? autoSubmit,
+      targetScore: newSettings.targetScore ?? targetScore
+    };
+
+    if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
+      chrome.storage.local.set({ tradeAssistSettings: currentSettings });
+    }
+  }, [offset, quantity, presets, language, autoSubmit, targetScore]);
+
+  // 同步外部语言变化
+  useEffect(() => {
+    if (currentLanguage && currentLanguage !== language) {
+      setLanguage(currentLanguage);
+      saveSettings({ language: currentLanguage });
+    }
+  }, [currentLanguage]);
+
+  const handleAddPreset = () => {
+    const val = parseFloat(newPresetVal);
+    if (!isNaN(val) && val > 0) {
+      const newPresets = [...presets, { id: Date.now().toString(), value: val }];
+      setPresets(newPresets);
+      setNewPresetVal('');
+      saveSettings({ presets: newPresets });
+    }
+  };
+
+  const handleDeletePreset = (id) => {
+    const newPresets = presets.filter(p => p.id !== id);
+    setPresets(newPresets);
+    if (newPresets.length > 0 && quantity === presets.find(p => p.id === id)?.value) {
+      setQuantity(newPresets[0].value);
+    }
+    saveSettings({ presets: newPresets });
+  };
+
+  const handleQuantitySelect = (val) => {
+    setQuantity(val);
+    setIsAutoMode(false);
+    saveSettings({ selectedQuantity: val });
+  };
+
+  const handleOffsetChange = (e) => {
+    const val = parseInt(e.target.value);
+    setOffset(val);
+    saveSettings({ offsetTicks: val });
+  };
+
+  const handleAutoSubmitChange = (e) => {
+    const val = e.target.checked;
+    setAutoSubmit(val);
+    saveSettings({ autoSubmit: val });
+  };
+
+  // 计算目标金额 = 2^分数
+  const calculateTargetAmount = (score) => Math.pow(2, score);
+
+  // 计算剩余需刷金额
+  const calculateRemainingAmount = useCallback((buyTotal) => {
+    const targetAmount = calculateTargetAmount(targetScore);
+    const adjustedAmount = buyTotal * 4;
+    const remaining = targetAmount - adjustedAmount;
+    if (remaining <= 0) return 0;
+
+    // 向上取整保留两位小数
+    const baseAmount = Math.ceil((remaining / 4) * 100) / 100;
+
+    // 添加 0.00 ~ 1.00 的随机超额（保留两位小数），避免系统检测
+    const randomExtra = Math.floor(Math.random() * 101) / 100;
+
+    return Math.round((baseAmount + randomExtra) * 100) / 100;
+  }, [targetScore]);
+
+  // 自动刷新计算逻辑
+  const refreshAutoAmount = useCallback(async () => {
+    try {
+      let orders = collectOrdersFromTable();
+
+      // 如果表格不存在，尝试切换到历史委托标签
+      if (orders.length === 0) {
+        const tbody = document.querySelector('#trd-order-history tbody');
+        if (!tbody) {
+          const historyTab = document.querySelector('#bn-tab-orderHistory') ||
+                            document.querySelector('[data-tab-key="orderHistory"]');
+          if (historyTab) {
+            historyTab.click();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            orders = collectOrdersFromTable();
+          }
+        }
+      }
+
+      const stats = calculateStats(orders);
+      const remaining = calculateRemainingAmount(stats.buyTotal);
+      setAutoAmount(remaining);
+    } catch (err) {
+      console.error('[AutoAmount] Error:', err);
+      setAutoAmount(null);
+    }
+  }, [calculateRemainingAmount]);
+
+  // 3秒定时器 - 进入fill tab时启用
+  useEffect(() => {
+    let intervalId = null;
+
+    if (activeTab === 'fill') {
+      refreshAutoAmount();
+      intervalId = setInterval(refreshAutoAmount, 3000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [activeTab, refreshAutoAmount]);
+
+  // 目标分数变更
+  const handleTargetScoreChange = (e) => {
+    const val = parseInt(e.target.value);
+    if (!isNaN(val) && val >= 1 && val <= 30) {
+      setTargetScore(val);
+      saveSettings({ targetScore: val });
+    }
+  };
+
+  // 选择自动预设
+  const handleAutoPresetSelect = () => {
+    if (autoAmount !== null && autoAmount > 0) {
+      setQuantity(autoAmount);
+      setIsAutoMode(true);
+      saveSettings({ selectedQuantity: autoAmount });
+    }
+  };
+
+  // 直接调用填充逻辑（content script 环境）
+  const handleExecute = async () => {
+    setStatus(t('executing'));
+
+    try {
+      const result = executeFill(offset, quantity, autoSubmit);
+
+      if (result.success) {
+        setStatus(t('success'));
+        setTimeout(() => setStatus(''), 2000);
+      } else {
+        // 映射错误码到翻译消息
+        const errorCodeMap = {
+          'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_NOT_CHECKED': 'reverseOrderNotChecked',
+          'SELL_INPUT_NOT_FOUND': 'sellInputNotFound'
+        };
+        const errorKey = result.errorCode && errorCodeMap[result.errorCode];
+        setStatus(errorKey ? t(errorKey) : (result.message || t('failed')));
+      }
+    } catch (e) {
+      setStatus(t('failed'));
+      console.error(e);
+    }
+  };
+
+  // 快速卖出处理函数
+  const handleQuickSell = async () => {
+    setQuickSellStatus(t('quickSellExecuting'));
+
+    try {
+      const result = await executeQuickSell();
+
+      if (result.success) {
+        setQuickSellStatus(t('quickSellSuccess'));
+        setTimeout(() => setQuickSellStatus(''), 2000);
+      } else {
+        // 映射错误码到翻译消息
+        const errorCodeMap = {
+          'SELL_TAB_NOT_FOUND': 'sellTabNotFound',
+          'PRICE_NOT_FOUND': 'priceNotFound',
+          'AMOUNT_DIV_NOT_FOUND': 'amountDivNotFound',
+          'SELL_BUTTON_NOT_FOUND': 'sellButtonNotFound'
+        };
+        const errorKey = result.errorCode && errorCodeMap[result.errorCode];
+        setQuickSellStatus(errorKey ? t(errorKey) : (result.message || t('failed')));
+      }
+    } catch (e) {
+      setQuickSellStatus(t('failed'));
+      console.error(e);
+    }
+  };
+
+  // 计算统计数据（刷分 tab）
+  const stats = useMemo(() => {
+    if (orders.length === 0) return { buyTotal: 0, sellTotal: 0, buyCount: 0, sellCount: 0 };
+    return calculateStats(orders);
+  }, [orders]);
+
+  // 计算空投总额
+  const airdropAmount = useMemo(() => {
+    return airdrops.reduce((sum, a) => sum + a.amount, 0);
+  }, [airdrops]);
+
+  // 计算损耗
+  const loss = useMemo(() => {
+    if (orders.length === 0) return 0;
+    return calculateLoss(stats, airdropAmount);
+  }, [stats, airdropAmount, orders.length]);
+
+  // 计算今日得分
+  const scoreData = useMemo(() => {
+    if (orders.length === 0) return { score: 0, adjustedAmount: 0 };
+    return calculateTodayScore(orders);
+  }, [orders]);
+
+  // 开始计算刷分
+  const handleCalculateScore = async () => {
+    setScoreStatus('loading');
+    setErrorMsg('');
+    setOrders([]);
+    setAirdrops([]);
+
+    try {
+      // 第一次尝试获取数据
+      let result = collectOrdersFromTable();
+
+      // 如果表格不存在，尝试切换到历史委托标签
+      if (result.length === 0) {
+        const tbody = document.querySelector('#trd-order-history tbody');
+        if (!tbody) {
+          // 尝试点击历史委托标签
+          const historyTab = document.querySelector('#bn-tab-orderHistory') ||
+                            document.querySelector('[data-tab-key="orderHistory"]');
+          if (historyTab) {
+            historyTab.click();
+            // 等待 DOM 更新
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // 重新尝试获取数据
+            result = collectOrdersFromTable();
+          }
+        }
+      }
+
+      // 再次检查结果
+      if (result.length === 0) {
+        const tbody = document.querySelector('#trd-order-history tbody');
+        if (!tbody) {
+          setErrorMsg(t('tableNotFound'));
+          setScoreStatus('error');
+          return;
+        }
+        setScoreStatus('done');
+        return;
+      }
+
+      setOrders(result);
+
+      // 检测空投
+      const detectedAirdrops = detectAirdrops(result);
+      setAirdrops(detectedAirdrops);
+
+      setScoreStatus('done');
+    } catch (err) {
+      console.error('[ScoreCalculator]', err);
+      setErrorMsg(err.message || t('failed'));
+      setScoreStatus('error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col bg-gray-900 text-gray-100 font-sans p-4">
+      {/* Tabs */}
+      <div className="flex mb-4 bg-gray-800 rounded-lg p-1">
+        <button
+          onClick={() => setActiveTab('fill')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all cursor-pointer ${
+            activeTab === 'fill'
+              ? 'bg-blue-600 text-white shadow'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          }`}
+        >
+          {t('tabFill')}
+        </button>
+        <button
+          onClick={() => setActiveTab('score')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all cursor-pointer ${
+            activeTab === 'score'
+              ? 'bg-blue-600 text-white shadow'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          }`}
+        >
+          {t('tabScore')}
+        </button>
+      </div>
+
+      {/* Fill Tab Content */}
+      {activeTab === 'fill' && (
+      <div className="flex-1 space-y-4">
+
+        {/* Offset & Target Score Section - Same Row */}
+        <div className="flex gap-3">
+          {/* Tick Offset */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-400">
+              <Cog6ToothIcon className="w-3 h-3" />
+              <span>{language === 'zh' ? '偏移' : 'Offset'}</span>
+            </label>
+            <div className="flex items-center gap-1 bg-gray-800 p-2 rounded-lg border border-gray-700">
+              <span className="text-gray-400 text-sm">±</span>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={offset}
+                onChange={handleOffsetChange}
+                className="w-10 bg-gray-700 border border-gray-600 rounded px-1 py-1 text-center font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+          </div>
+
+          {/* Target Score */}
+          <div className="flex-1 space-y-1">
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-400">
+              <StarIcon className="w-3 h-3" />
+              <span>{t('targetScoreLabel')}</span>
+            </label>
+            <div className="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
+              <input
+                type="number"
+                min="1"
+                max="30"
+                value={targetScore}
+                onChange={handleTargetScoreChange}
+                className="w-10 bg-gray-700 border border-gray-600 rounded px-1 py-1 text-center font-mono font-bold text-purple-400 focus:outline-none focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-gray-500">{language === 'zh' ? '分' : 'pt'}</span>
+              <span className="text-gray-600">=</span>
+              <span className="font-mono text-sm text-purple-300">{calculateTargetAmount(targetScore).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quantity Section */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-400">{t('qtyLabel')}</label>
+          <div className="grid grid-cols-3 gap-2">
+            {/* Auto preset button */}
+            <button
+              onClick={handleAutoPresetSelect}
+              disabled={autoAmount === null}
+              className={`relative px-2 py-3 rounded-md text-sm font-mono font-semibold transition-all border
+                ${isAutoMode
+                  ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/50 cursor-pointer'
+                  : autoAmount === null
+                    ? 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-purple-900/30 border-purple-700 text-purple-300 hover:bg-purple-800/50 hover:border-purple-600 cursor-pointer'
+                }`}
+            >
+              <div className="flex flex-col items-center">
+                <span className="text-xs opacity-80">{t('autoPreset')}</span>
+                <span className="text-sm font-bold">
+                  {autoAmount === null
+                    ? '...'
+                    : autoAmount === 0
+                      ? t('targetReached')
+                      : autoAmount.toFixed(2)
+                  }
+                </span>
+              </div>
+            </button>
+
+            {/* Preset buttons */}
+            {presets.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => handleQuantitySelect(preset.value)}
+                className={`relative group px-2 py-3 rounded-md text-sm font-mono font-semibold transition-all border cursor-pointer
+                  ${quantity === preset.value && !isAutoMode
+                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50'
+                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-750 hover:border-gray-600'
+                  }`}
+              >
+                {preset.value}
+                <div
+                  onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
+                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex w-4 h-4 bg-red-500 rounded-full items-center justify-center cursor-pointer hover:bg-red-400"
+                >
+                  <TrashIcon className="w-2.5 h-2.5 text-white" />
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Add Preset */}
+          <div className="flex gap-2 mt-2">
+            <input
+              type="number"
+              value={newPresetVal}
+              onChange={(e) => setNewPresetVal(e.target.value)}
+              placeholder={t('addQtyPlaceholder')}
+              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 placeholder-gray-600"
+            />
+            <button
+              onClick={handleAddPreset}
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 border border-gray-600 cursor-pointer"
+            >
+              <PlusIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Auto Submit Toggle */}
+        <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-3">
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoSubmit}
+              onChange={handleAutoSubmitChange}
+              className="form-checkbox h-5 w-5 text-red-500 rounded border-gray-600 bg-gray-700 focus:ring-red-500"
+            />
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-red-400">{t('autoSubmit')}</span>
+              <span className="text-[10px] text-red-300/70">{t('autoSubmitDesc')}</span>
+            </div>
+          </label>
+        </div>
+
+        {/* Action Footer */}
+        <div className="mt-5 pt-4 border-t border-gray-800 space-y-3">
+          {/* 自动填充按钮 */}
+          <button
+            onClick={handleExecute}
+            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer
+              ${autoSubmit
+                ? 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 shadow-red-900/20'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-900/20'
+              }`}
+          >
+            <BoltIcon className="w-5 h-5" />
+            {t('autoFill')}
+          </button>
+          {status && (
+            <div className={`text-center text-xs font-mono font-medium
+              ${status === t('success') ? 'text-green-400' : 'text-yellow-400'}
+            `}>
+              {status}
+            </div>
+          )}
+
+          {/* 快速卖出按钮 */}
+          <button
+            onClick={handleQuickSell}
+            className="w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 shadow-orange-900/20"
+          >
+            <BoltIcon className="w-5 h-5" />
+            {t('quickSell')}
+          </button>
+          {quickSellStatus && (
+            <div className={`text-center text-xs font-mono font-medium
+              ${quickSellStatus === t('quickSellSuccess') ? 'text-green-400' : 'text-yellow-400'}
+            `}>
+              {quickSellStatus}
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
+      {/* Score Tab Content */}
+      {activeTab === 'score' && (
+      <div className="flex-1 space-y-4">
+
+        {/* 统计结果区域 */}
+        {scoreStatus === 'done' && orders.length > 0 && (
+          <>
+            {/* 交易统计 */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
+                <ChartBarIcon className="w-4 h-4" />
+                <span>{t('statsTitle')}</span>
+              </label>
+              <div className="bg-gray-800 p-3 rounded-lg border border-gray-700 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">{t('buyTotal')}</span>
+                  <span className="font-mono font-semibold text-green-400 text-xs">
+                    {stats.buyTotal.toFixed(6)} USDT
+                    <span className="text-gray-500 text-xs ml-2">({stats.buyCount} {t('txUnit')})</span>
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">{t('sellTotal')}</span>
+                  <span className="font-mono font-semibold text-red-400 text-xs">
+                    {stats.sellTotal.toFixed(6)} USDT
+                    <span className="text-gray-500 text-xs ml-2">({stats.sellCount} {t('txUnit')})</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 损耗结果 和 得分 */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* 损耗 */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
+                  <CalculatorIcon className="w-4 h-4" />
+                  <span>{t('lossTitle')}</span>
+                </label>
+                <div className={`p-3 rounded-lg border ${loss >= 0 ? 'bg-red-900/20 border-red-900/50' : 'bg-green-900/20 border-green-900/50'}`}>
+                  <div className={`text-xl font-bold font-mono text-center ${loss >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {loss >= 0 ? '-' : '+'}{Math.abs(loss).toFixed(2)}
+                  </div>
+                  <p className="text-[10px] text-gray-500 text-center mt-1">USDT</p>
+                </div>
+              </div>
+
+              {/* 得分 */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
+                  <StarIcon className="w-4 h-4" />
+                  <span>{t('scoreTitle')}</span>
+                </label>
+                <div className="p-3 rounded-lg border bg-amber-900/20 border-amber-900/50">
+                  <div className="text-xl font-bold font-mono text-center text-amber-400">
+                    {scoreData.score}
+                  </div>
+                  <p className="text-[10px] text-gray-500 text-center mt-1">{language === 'zh' ? '分' : 'pts'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 公式说明 */}
+            <div className="text-[10px] text-gray-500 space-y-1">
+              <p>{t('formula')}</p>
+              <p>{t('scoreFormula')} = {scoreData.adjustedAmount.toFixed(2)} U</p>
+              {airdrops.length > 0 && (
+                <p className="text-yellow-500">
+                  {t('airdropDeducted')}: {airdropAmount.toFixed(2)} USDT ({airdrops.map(a => a.token).join(', ')})
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* 无数据提示 */}
+        {scoreStatus === 'done' && orders.length === 0 && (
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
+            <p className="text-gray-400">{t('noOrders')}</p>
+          </div>
+        )}
+
+        {/* 错误提示 */}
+        {scoreStatus === 'error' && (
+          <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-4 text-center">
+            <p className="text-red-400">{errorMsg || t('failed')}</p>
+          </div>
+        )}
+
+        {/* 操作按钮 */}
+        <div className="mt-5 pt-4 border-t border-gray-800">
+          <button
+            onClick={handleCalculateScore}
+            disabled={scoreStatus === 'loading'}
+            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all
+              ${scoreStatus === 'loading'
+                ? 'bg-gray-600 cursor-not-allowed'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 cursor-pointer'
+              }`}
+          >
+            <ArrowPathIcon className={`w-5 h-5 ${scoreStatus === 'loading' ? 'animate-spin' : ''}`} />
+            {scoreStatus === 'loading' ? t('calculating') : (scoreStatus === 'done' ? t('recalculate') : t('calcScore'))}
+          </button>
+        </div>
+      </div>
+      )}
+    </div>
+  );
+};
+
+export default App;

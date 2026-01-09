@@ -1,0 +1,5 @@
+{
+  "name": "币安Alpha助手",
+  "description": "A Chrome Extension helper to automatically calculate and fill trading limit orders based on the current order book price and configurable offsets.",
+  "requestFramePermissions": []
+}
