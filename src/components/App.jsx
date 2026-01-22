@@ -26,8 +26,10 @@ const translations = {
     errorTab: '错误: 无活动标签页',
     errorRefresh: '错误: 请刷新页面?',
     failed: '失败',
-    reverseOrderNotFound: '未找到"反向订单"选项',
-    reverseOrderNotChecked: '请先勾选"反向订单"选项',
+    reverseOrderNotFound: '未找到"反向订单"选项，请刷新页面',
+    reverseOrderAutoCheckFailed: '自动勾选"反向订单"失败，请手动勾选后重试',
+    reverseOrderAutoUncheckFailed: '自动取消"反向订单"失败，请手动取消后重试',
+    buyTabNotFound: '未找到"买入"标签页，请刷新页面',
     sellInputNotFound: '未找到卖出价格输入框',
     version: 'v1.1.0',
     // Tabs
@@ -78,8 +80,10 @@ const translations = {
     errorTab: 'Error: No active tab',
     errorRefresh: 'Error: Refresh page?',
     failed: 'Failed',
-    reverseOrderNotFound: '"Reverse Order" option not found',
-    reverseOrderNotChecked: 'Please enable "Reverse Order" first',
+    reverseOrderNotFound: '"Reverse Order" option not found, please refresh',
+    reverseOrderAutoCheckFailed: 'Failed to auto-check "Reverse Order", please check manually',
+    reverseOrderAutoUncheckFailed: 'Failed to auto-uncheck "Reverse Order", please uncheck manually',
+    buyTabNotFound: '"Buy" tab not found, please refresh',
     sellInputNotFound: 'Sell price input not found',
     version: 'v1.1.0',
     // Tabs
@@ -322,7 +326,7 @@ const App = ({ currentLanguage }) => {
     setStatus(t('executing'));
 
     try {
-      const result = executeFill(offset, quantity, autoSubmit);
+      const result = await executeFill(offset, quantity, autoSubmit);
 
       if (result.success) {
         setStatus(t('success'));
@@ -331,7 +335,9 @@ const App = ({ currentLanguage }) => {
         // 映射错误码到翻译消息
         const errorCodeMap = {
           'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
-          'REVERSE_ORDER_NOT_CHECKED': 'reverseOrderNotChecked',
+          'REVERSE_ORDER_CHECKBOX_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_AUTO_CHECK_FAILED': 'reverseOrderAutoCheckFailed',
+          'BUY_TAB_NOT_FOUND': 'buyTabNotFound',
           'SELL_INPUT_NOT_FOUND': 'sellInputNotFound'
         };
         const errorKey = result.errorCode && errorCodeMap[result.errorCode];
@@ -356,6 +362,9 @@ const App = ({ currentLanguage }) => {
       } else {
         // 映射错误码到翻译消息
         const errorCodeMap = {
+          'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_CHECKBOX_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_AUTO_UNCHECK_FAILED': 'reverseOrderAutoUncheckFailed',
           'SELL_TAB_NOT_FOUND': 'sellTabNotFound',
           'PRICE_NOT_FOUND': 'priceNotFound',
           'AMOUNT_DIV_NOT_FOUND': 'amountDivNotFound',

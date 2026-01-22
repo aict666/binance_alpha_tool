@@ -13,27 +13,70 @@ function setNativeValue(element, value) {
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-export function executeFill(offsetTicks, quantity, autoSubmit = false) {
+export async function executeFill(offsetTicks, quantity, autoSubmit = false) {
   try {
     // 0. 预检查: 验证"反向订单"复选框
     const reverseOrderContainer = Array.from(document.querySelectorAll('div'))
       .find(div => div.textContent?.includes('反向订单'));
 
+    // 找不到容器 → 提示刷新
     if (!reverseOrderContainer) {
       return {
         success: false,
-        message: '未找到"反向订单"选项，请确认页面已正确加载',
+        message: '未找到"反向订单"选项，请刷新页面后重试',
         errorCode: 'REVERSE_ORDER_NOT_FOUND'
       };
     }
 
+    // 找checkbox元素
     const reverseOrderCheckbox = reverseOrderContainer.querySelector('div[role="checkbox"]');
-    if (!reverseOrderCheckbox || reverseOrderCheckbox.getAttribute('aria-checked') !== 'true') {
+
+    // checkbox不存在 → 提示刷新
+    if (!reverseOrderCheckbox) {
       return {
         success: false,
-        message: '请先勾选"反向订单"选项',
-        errorCode: 'REVERSE_ORDER_NOT_CHECKED'
+        message: '未找到"反向订单"复选框，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_CHECKBOX_NOT_FOUND'
       };
+    }
+
+    // 如果未勾选 → 自动勾选
+    if (reverseOrderCheckbox.getAttribute('aria-checked') !== 'true') {
+      console.log("[TradeAssist] 自动勾选反向订单");
+      reverseOrderCheckbox.click();
+
+      // 等待DOM更新（勾选后会出现卖出输入框）
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 验证勾选是否成功
+      if (reverseOrderCheckbox.getAttribute('aria-checked') !== 'true') {
+        return {
+          success: false,
+          message: '自动勾选"反向订单"失败，请手动勾选后重试',
+          errorCode: 'REVERSE_ORDER_AUTO_CHECK_FAILED'
+        };
+      }
+    }
+
+    // 确保在"买入"tab
+    const tabs = document.querySelectorAll('[role="tab"]');
+    const buyTab = Array.from(tabs).find(tab =>
+      tab.textContent?.includes('买入') || tab.textContent?.includes('Buy')
+    );
+
+    if (!buyTab) {
+      return {
+        success: false,
+        message: '未找到"买入"标签页，请刷新页面后重试',
+        errorCode: 'BUY_TAB_NOT_FOUND'
+      };
+    }
+
+    // 如果不在买入tab，切换过去
+    if (buyTab.getAttribute('aria-selected') !== 'true') {
+      console.log("[TradeAssist] 切换到买入模式");
+      buyTab.click();
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     // 预检查: 验证卖出价格输入框存在
@@ -118,6 +161,46 @@ export function executeFill(offsetTicks, quantity, autoSubmit = false) {
 export async function executeQuickSell() {
   try {
     console.log("[TradeAssist] 开始执行快速卖出");
+
+    // Step 0: 确保"反向订单"是关闭的
+    const reverseOrderContainer = Array.from(document.querySelectorAll('div'))
+      .find(div => div.textContent?.includes('反向订单'));
+
+    if (!reverseOrderContainer) {
+      return {
+        success: false,
+        message: '未找到"反向订单"选项，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_NOT_FOUND'
+      };
+    }
+
+    const reverseOrderCheckbox = reverseOrderContainer.querySelector('div[role="checkbox"]');
+
+    if (!reverseOrderCheckbox) {
+      return {
+        success: false,
+        message: '未找到"反向订单"复选框，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_CHECKBOX_NOT_FOUND'
+      };
+    }
+
+    // 如果已勾选 → 自动取消勾选
+    if (reverseOrderCheckbox.getAttribute('aria-checked') === 'true') {
+      console.log("[TradeAssist] 自动取消勾选反向订单");
+      reverseOrderCheckbox.click();
+
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 验证取消勾选是否成功
+      if (reverseOrderCheckbox.getAttribute('aria-checked') === 'true') {
+        return {
+          success: false,
+          message: '自动取消"反向订单"失败，请手动取消后重试',
+          errorCode: 'REVERSE_ORDER_AUTO_UNCHECK_FAILED'
+        };
+      }
+    }
 
     // Step 1: 切换到卖出模式 - 使用文本匹配查找卖出tab
     const tabs = document.querySelectorAll('[role="tab"]');
@@ -207,8 +290,8 @@ export async function executeQuickSell() {
       };
     }
 
-    const amountText = amountDiv.innerText; // 例如 "0.16014 LISA"
-    const amountMatch = amountText.match(/[\d.]+/);
+    const amountText = amountDiv.innerText; // 例如 "5,930.37 OWL"
+    const amountMatch = amountText.replace(/,/g, '').match(/[\d.]+/);
 
     if (!amountMatch) {
       return {
