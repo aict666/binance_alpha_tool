@@ -128,20 +128,17 @@ export function detectAirdrops(orders) {
     }
   }
 
-  // 找出可能的空投（卖出 > 买入）
+  // 找出空投：只有当该币种没有任何买入记录，且有卖出记录时，才视为空投
   const airdrops = [];
   for (const [token, stats] of Object.entries(tokenStats)) {
-    const extraSells = stats.sellCount - stats.buyCount;
-    if (extraSells > 0) {
-      // 计算多出的卖出金额（取最早的几笔，因为空投通常是先卖出）
-      const sellsSorted = stats.sells.sort((a, b) => a.time - b.time);
-      const airdropSells = sellsSorted.slice(0, extraSells);
-      const airdropAmount = airdropSells.reduce((sum, o) => sum + o.amount, 0);
+    if (stats.buyCount === 0 && stats.sellCount > 0) {
+      // 该币种只有卖出没有买入，所有卖出都是空投
+      const airdropAmount = stats.sells.reduce((sum, o) => sum + o.amount, 0);
 
       airdrops.push({
         token,
         amount: airdropAmount,
-        count: extraSells
+        count: stats.sellCount
       });
     }
   }
