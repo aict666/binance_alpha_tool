@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Cog6ToothIcon, PlusIcon, TrashIcon, BoltIcon, ChartBarIcon, CalculatorIcon, StarIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
-import { executeFill, executeQuickSell } from '../content/fill-logic';
+import { executeFill, executeQuickSell, executeFillWithPrice } from '../content/fill-logic';
 import {
   collectOrdersFromTable,
   detectAirdrops,
@@ -229,10 +229,10 @@ const App = ({ currentLanguage }) => {
     }
   }, []);
 
-  // 实时刷新价格（每秒）
+  // 实时刷新价格（200ms）
   useEffect(() => {
     fetchCurrentPrice();
-    const interval = setInterval(fetchCurrentPrice, 1000);
+    const interval = setInterval(fetchCurrentPrice, 200);
     return () => clearInterval(interval);
   }, [fetchCurrentPrice]);
 
@@ -300,10 +300,10 @@ const App = ({ currentLanguage }) => {
     }
   }, [parseQuantityText]);
 
-  // 实时刷新最大委托量（每秒）
+  // 实时刷新最大委托量（200ms）
   useEffect(() => {
     fetchMaxOrder();
-    const interval = setInterval(fetchMaxOrder, 1000);
+    const interval = setInterval(fetchMaxOrder, 200);
     return () => clearInterval(interval);
   }, [fetchMaxOrder]);
 
@@ -491,25 +491,17 @@ const App = ({ currentLanguage }) => {
     }
   };
 
-  // 根据最大委托量自动填充
+  // 根据最大委托量价格自动填充（使用预设数量）
   const handleFillByMaxOrder = async () => {
-    if (!maxOrderInfo || !currentPrice) {
+    if (!maxOrderInfo) {
       setStatus('未找到委托数据');
       return;
     }
 
-    // 计算需要填充的 USDT 金额 = 最大委托数量 × 当前价格
-    const usdtAmount = maxOrderInfo.quantity * currentPrice;
-
-    // 设置数量为计算出的金额
-    setQuantity(usdtAmount);
-    setIsAutoMode(false);
-    saveSettings({ selectedQuantity: usdtAmount });
-
-    // 自动执行填充
+    // 使用最大委托量的价格，但数量用预设的 quantity
     setStatus(t('executing'));
     try {
-      const result = await executeFill(offset, usdtAmount, autoSubmit);
+      const result = await executeFillWithPrice(maxOrderInfo.price, offset, quantity, autoSubmit);
       if (result.success) {
         setStatus(t('success'));
         setTimeout(() => setStatus(''), 2000);

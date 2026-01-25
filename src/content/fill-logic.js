@@ -340,3 +340,131 @@ export async function executeQuickSell() {
     return { success: false, message: error.message };
   }
 }
+
+// 根据指定价格填充（用于最大委托量填充）
+export async function executeFillWithPrice(targetPrice, offsetTicks, quantity, autoSubmit = false) {
+  try {
+    // 0. 预检查: 验证"反向订单"复选框
+    const reverseOrderContainer = Array.from(document.querySelectorAll('div'))
+      .find(div => div.textContent?.includes('反向订单'));
+
+    if (!reverseOrderContainer) {
+      return {
+        success: false,
+        message: '未找到"反向订单"选项，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_NOT_FOUND'
+      };
+    }
+
+    const reverseOrderCheckbox = reverseOrderContainer.querySelector('div[role="checkbox"]');
+
+    if (!reverseOrderCheckbox) {
+      return {
+        success: false,
+        message: '未找到"反向订单"复选框，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_CHECKBOX_NOT_FOUND'
+      };
+    }
+
+    // 如果未勾选 → 自动勾选
+    if (reverseOrderCheckbox.getAttribute('aria-checked') !== 'true') {
+      console.log("[TradeAssist] 自动勾选反向订单");
+      reverseOrderCheckbox.click();
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      if (reverseOrderCheckbox.getAttribute('aria-checked') !== 'true') {
+        return {
+          success: false,
+          message: '自动勾选"反向订单"失败，请手动勾选后重试',
+          errorCode: 'REVERSE_ORDER_AUTO_CHECK_FAILED'
+        };
+      }
+    }
+
+    // 确保在"买入"tab
+    const tabs = document.querySelectorAll('[role="tab"]');
+    const buyTab = Array.from(tabs).find(tab =>
+      tab.textContent?.includes('买入') || tab.textContent?.includes('Buy')
+    );
+
+    if (!buyTab) {
+      return {
+        success: false,
+        message: '未找到"买入"标签页，请刷新页面后重试',
+        errorCode: 'BUY_TAB_NOT_FOUND'
+      };
+    }
+
+    if (buyTab.getAttribute('aria-selected') !== 'true') {
+      console.log("[TradeAssist] 切换到买入模式");
+      buyTab.click();
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    // 预检查: 验证卖出价格输入框存在
+    const sellPriceInput = document.querySelector('input[placeholder="限价卖出"]');
+    if (!sellPriceInput) {
+      return {
+        success: false,
+        message: '未找到卖出价格输入框，请确认"反向订单"已开启',
+        errorCode: 'SELL_INPUT_NOT_FOUND'
+      };
+    }
+
+    // 获取限价输入框和步长
+    const limitPriceInput = document.querySelector('#limitPrice');
+    if (!limitPriceInput) {
+      return {
+        success: false,
+        message: '未找到限价输入框',
+        errorCode: 'LIMIT_PRICE_INPUT_NOT_FOUND'
+      };
+    }
+
+    const stepAttr = limitPriceInput.getAttribute('step');
+    const stepValue = parseFloat(stepAttr);
+
+    if (isNaN(stepValue)) {
+      return {
+        success: false,
+        message: '无法获取价格步长',
+        errorCode: 'STEP_VALUE_ERROR'
+      };
+    }
+
+    // 计算精度
+    const precision = Math.abs(Math.floor(Math.log10(stepValue)));
+    const safePrecision = precision > 20 ? 8 : precision;
+
+    // 买入价格 = 委托价格 + 偏移，卖出价格 = 委托价格 - 偏移
+    const buyPrice = (targetPrice + stepValue * offsetTicks).toFixed(safePrecision);
+    const sellPrice = (targetPrice - stepValue * offsetTicks).toFixed(safePrecision);
+
+    console.log(`[TradeAssist] 指定价格填充: Buy=${buyPrice}, Sell=${sellPrice}, Qty=${quantity}`);
+
+    // 填充输入框
+    setNativeValue(limitPriceInput, buyPrice);
+
+    const amountInputs = Array.from(document.querySelectorAll('input[placeholder*="最小"]'));
+    amountInputs.forEach(input => {
+      setNativeValue(input, quantity.toString());
+    });
+
+    setNativeValue(sellPriceInput, sellPrice);
+
+    // 自动点击买入按钮
+    if (autoSubmit) {
+      const buyBtn = document.querySelector('.bn-button.bn-button__buy');
+      if (buyBtn) {
+        console.log("[TradeAssist] Auto-clicking BUY button");
+        buyBtn.click();
+      }
+    }
+
+    return { success: true };
+
+  } catch (error) {
+    console.error("[TradeAssist] 指定价格填充错误:", error);
+    return { success: false, message: error.message };
+  }
+}
