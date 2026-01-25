@@ -135,6 +135,15 @@ const DEFAULT_SETTINGS = {
 
 export { translations };
 
+// 将数字格式化为 k 格式（如 16418 -> 16.42k）
+const formatToK = (num) => {
+  if (num === null || isNaN(num)) return '--';
+  if (num >= 1000) {
+    return (num / 1000).toFixed(2) + 'k';
+  }
+  return num.toFixed(2);
+};
+
 const App = ({ currentLanguage }) => {
   const [offset, setOffset] = useState(DEFAULT_SETTINGS.offsetTicks);
   const [quantity, setQuantity] = useState(DEFAULT_SETTINGS.selectedQuantity);
@@ -158,6 +167,11 @@ const App = ({ currentLanguage }) => {
   const [orders, setOrders] = useState([]);
   const [airdrops, setAirdrops] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Current price state for real-time display
+  const [currentPrice, setCurrentPrice] = useState(null);
+  // 最大委托量信息 { price, quantity, side: 'bid'|'ask' }
+  const [maxOrderInfo, setMaxOrderInfo] = useState(null);
 
   // Helper for translations
   const t = (key) => translations[language][key];
@@ -194,6 +208,104 @@ const App = ({ currentLanguage }) => {
       chrome.storage.local.set({ tradeAssistSettings: currentSettings });
     }
   }, [offset, quantity, presets, language, autoSubmit, targetScore]);
+
+  // 从页面获取当前价格
+  const fetchCurrentPrice = useCallback(() => {
+    try {
+      const container = document.querySelector('.orderlist-container');
+      if (!container) return;
+
+      const priceEl = container.querySelector('.text-\\[20px\\]');
+      if (!priceEl) return;
+
+      const priceText = priceEl.innerText.replace(/[^\d.]/g, '');
+      const price = parseFloat(priceText);
+
+      if (!isNaN(price) && price > 0) {
+        setCurrentPrice(price);
+      }
+    } catch (e) {
+      console.error('[TradeAssist] 获取价格失败:', e);
+    }
+  }, []);
+
+  // 实时刷新价格（每秒）
+  useEffect(() => {
+    fetchCurrentPrice();
+    const interval = setInterval(fetchCurrentPrice, 1000);
+    return () => clearInterval(interval);
+  }, [fetchCurrentPrice]);
+
+  // 计算预估买入数量
+  const estimatedBuyQuantity = useMemo(() => {
+    if (currentPrice === null || currentPrice === 0 || !quantity) return null;
+    return quantity / currentPrice;
+  }, [currentPrice, quantity]);
+
+  // 解析数量字符串（如 "116.89K" -> 116890）
+  const parseQuantityText = useCallback((text) => {
+    if (!text) return 0;
+    const cleanText = text.trim().toUpperCase();
+    const num = parseFloat(cleanText.replace(/[^0-9.]/g, ''));
+    if (isNaN(num)) return 0;
+    if (cleanText.includes('K')) return num * 1000;
+    if (cleanText.includes('M')) return num * 1000000;
+    return num;
+  }, []);
+
+  // 获取订单簿中最大委托量的订单
+  const fetchMaxOrder = useCallback(() => {
+    try {
+      let maxOrder = { price: 0, quantity: 0, side: '' };
+
+      // 解析卖单 (ask)
+      const askList = document.querySelector('.orderbook-ask');
+      if (askList) {
+        const askRows = askList.querySelectorAll('.orderbook-progress');
+        askRows.forEach(row => {
+          const priceEl = row.querySelector('.ask-light.emit-price span');
+          const qtyEl = row.querySelector('.text.emit-price span');
+          if (priceEl && qtyEl) {
+            const price = parseFloat(priceEl.innerText);
+            const qty = parseQuantityText(qtyEl.innerText);
+            if (qty > maxOrder.quantity) {
+              maxOrder = { price, quantity: qty, side: 'ask' };
+            }
+          }
+        });
+      }
+
+      // 解析买单 (bid)
+      const bidList = document.querySelector('.orderbook-bid');
+      if (bidList) {
+        const bidRows = bidList.querySelectorAll('.orderbook-progress');
+        bidRows.forEach(row => {
+          const priceEl = row.querySelector('.bid-light.emit-price span');
+          const qtyEl = row.querySelector('.text.emit-price span');
+          if (priceEl && qtyEl) {
+            const price = parseFloat(priceEl.innerText);
+            const qty = parseQuantityText(qtyEl.innerText);
+            if (qty > maxOrder.quantity) {
+              maxOrder = { price, quantity: qty, side: 'bid' };
+            }
+          }
+        });
+      }
+
+      if (maxOrder.quantity > 0) {
+        setMaxOrderInfo(maxOrder);
+      }
+    } catch (e) {
+      console.error('[TradeAssist] 获取最大委托量失败:', e);
+    }
+  }, [parseQuantityText]);
+
+  // 实时刷新最大委托量（每秒）
+  useEffect(() => {
+    fetchMaxOrder();
+    const interval = setInterval(fetchMaxOrder, 1000);
+    return () => clearInterval(interval);
+  }, [fetchMaxOrder]);
 
   // 同步外部语言变化
   useEffect(() => {
@@ -375,6 +487,45 @@ const App = ({ currentLanguage }) => {
       }
     } catch (e) {
       setQuickSellStatus(t('failed'));
+      console.error(e);
+    }
+  };
+
+  // 根据最大委托量自动填充
+  const handleFillByMaxOrder = async () => {
+    if (!maxOrderInfo || !currentPrice) {
+      setStatus('未找到委托数据');
+      return;
+    }
+
+    // 计算需要填充的 USDT 金额 = 最大委托数量 × 当前价格
+    const usdtAmount = maxOrderInfo.quantity * currentPrice;
+
+    // 设置数量为计算出的金额
+    setQuantity(usdtAmount);
+    setIsAutoMode(false);
+    saveSettings({ selectedQuantity: usdtAmount });
+
+    // 自动执行填充
+    setStatus(t('executing'));
+    try {
+      const result = await executeFill(offset, usdtAmount, autoSubmit);
+      if (result.success) {
+        setStatus(t('success'));
+        setTimeout(() => setStatus(''), 2000);
+      } else {
+        const errorCodeMap = {
+          'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_CHECKBOX_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_AUTO_CHECK_FAILED': 'reverseOrderAutoCheckFailed',
+          'BUY_TAB_NOT_FOUND': 'buyTabNotFound',
+          'SELL_INPUT_NOT_FOUND': 'sellInputNotFound'
+        };
+        const errorKey = result.errorCode && errorCodeMap[result.errorCode];
+        setStatus(errorKey ? t(errorKey) : (result.message || t('failed')));
+      }
+    } catch (e) {
+      setStatus(t('failed'));
       console.error(e);
     }
   };
@@ -616,6 +767,13 @@ const App = ({ currentLanguage }) => {
 
         {/* Action Footer */}
         <div className="mt-5 pt-4 border-t border-gray-800 space-y-3">
+          {/* 买入数量显示 */}
+          <div className="text-center py-2 bg-gray-800/50 rounded-lg border border-gray-700">
+            <span className="text-2xl font-bold font-mono text-green-400">
+              {formatToK(estimatedBuyQuantity)}
+            </span>
+          </div>
+
           {/* 自动填充按钮 */}
           <button
             onClick={handleExecute}
@@ -651,6 +809,42 @@ const App = ({ currentLanguage }) => {
               {quickSellStatus}
             </div>
           )}
+
+          {/* 最大委托量信息显示 */}
+          {maxOrderInfo && (
+            <div className="mt-3 p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                <span>{language === 'zh' ? '最大委托量' : 'Max Order'}</span>
+                <span className={`font-bold ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
+                  {maxOrderInfo.side === 'bid'
+                    ? (language === 'zh' ? '买单' : 'BUY')
+                    : (language === 'zh' ? '卖单' : 'SELL')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className={`font-mono ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
+                  {maxOrderInfo.price.toFixed(8)}
+                </span>
+                <span className="font-mono font-bold text-yellow-400">
+                  {formatToK(maxOrderInfo.quantity)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 根据委托数量自动填充按钮 */}
+          <button
+            onClick={handleFillByMaxOrder}
+            disabled={!maxOrderInfo}
+            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95
+              ${maxOrderInfo
+                ? 'bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 shadow-yellow-900/20 cursor-pointer'
+                : 'bg-gray-700 cursor-not-allowed opacity-50'
+              }`}
+          >
+            <BoltIcon className="w-5 h-5" />
+            {language === 'zh' ? '根据委托数量自动填充' : 'Fill by Max Order'}
+          </button>
         </div>
       </div>
       )}
