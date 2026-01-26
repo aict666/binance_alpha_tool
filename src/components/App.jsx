@@ -33,8 +33,8 @@ const translations = {
     sellInputNotFound: '未找到卖出价格输入框',
     version: 'v1.1.0',
     // Tabs
-    tabFill: '反向订单',
-    tabScore: '刷分',
+    tabFill: '刷分',
+    tabScore: '今日统计',
     // Score tab
     statsTitle: '今日交易统计',
     buyTotal: '买入总额',
@@ -87,8 +87,8 @@ const translations = {
     sellInputNotFound: 'Sell price input not found',
     version: 'v1.1.0',
     // Tabs
-    tabFill: 'Reverse Order',
-    tabScore: 'Score',
+    tabFill: 'Score',
+    tabScore: 'Today Stats',
     // Score tab
     statsTitle: 'Today\'s Trading Stats',
     buyTotal: 'Buy Total',
