@@ -600,12 +600,12 @@ const App = ({ currentLanguage }) => {
   };
 
   return (
-    <div className="flex flex-col bg-gray-900 text-gray-100 font-sans p-4">
+    <div className="flex flex-col bg-gray-900 text-gray-100 font-sans p-2 h-full">
       {/* Tabs */}
-      <div className="flex mb-4 bg-gray-800 rounded-lg p-1">
+      <div className="flex mb-2 bg-gray-800 rounded-lg p-0.5 shrink-0">
         <button
           onClick={() => setActiveTab('fill')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'fill'
               ? 'bg-blue-600 text-white shadow'
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -615,7 +615,7 @@ const App = ({ currentLanguage }) => {
         </button>
         <button
           onClick={() => setActiveTab('score')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'score'
               ? 'bg-blue-600 text-white shadow'
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -627,70 +627,70 @@ const App = ({ currentLanguage }) => {
 
       {/* Fill Tab Content */}
       {activeTab === 'fill' && (
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 flex flex-col gap-3 min-h-0 pt-1">
 
-        {/* Offset & Target Score Section - Same Row */}
-        <div className="flex gap-3">
+        {/* Offset & Target Score Section - Balanced Row */}
+        <div className="flex gap-2 shrink-0">
           {/* Tick Offset */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1 text-xs font-medium text-gray-400">
+          <div className="flex-1 space-y-1">
+            <label className="flex items-center gap-1 text-[10px] font-medium text-gray-400">
               <Cog6ToothIcon className="w-3 h-3" />
-              <span>{language === 'zh' ? '偏移' : 'Offset'}</span>
+              <span>{language === 'zh' ? '偏移 (Ticks)' : 'Offset'}</span>
             </label>
-            <div className="flex items-center gap-1 bg-gray-800 p-2 rounded-lg border border-gray-700">
-              <span className="text-gray-400 text-sm">±</span>
+            <div className="flex items-center justify-between bg-gray-800 px-2 py-1.5 rounded-md border border-gray-700 h-9">
+              <span className="text-gray-500 text-xs font-mono">±</span>
               <input
                 type="number"
                 min="1"
                 max="20"
                 value={offset}
                 onChange={handleOffsetChange}
-                className="w-10 bg-gray-700 border border-gray-600 rounded px-1 py-1 text-center font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full bg-transparent border-none text-center font-mono text-sm font-bold text-blue-400 focus:ring-0 p-0"
               />
             </div>
           </div>
 
           {/* Target Score */}
-          <div className="flex-1 space-y-1">
-            <label className="flex items-center gap-1 text-xs font-medium text-gray-400">
+          <div className="flex-[1.5] space-y-1">
+            <label className="flex items-center gap-1 text-[10px] font-medium text-gray-400">
               <StarIcon className="w-3 h-3" />
               <span>{t('targetScoreLabel')}</span>
             </label>
-            <div className="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
+            <div className="flex items-center bg-gray-800 px-2 py-1.5 rounded-md border border-gray-700 h-9">
               <input
                 type="number"
                 min="1"
                 max="30"
                 value={targetScore}
                 onChange={handleTargetScoreChange}
-                className="w-10 bg-gray-700 border border-gray-600 rounded px-1 py-1 text-center font-mono font-bold text-purple-400 focus:outline-none focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-8 bg-transparent border-none text-center font-mono text-sm font-bold text-purple-400 focus:ring-0 p-0"
               />
-              <span className="text-gray-500">{language === 'zh' ? '分' : 'pt'}</span>
-              <span className="text-gray-600">=</span>
-              <span className="font-mono text-sm text-purple-300">{calculateTargetAmount(targetScore).toLocaleString()}</span>
+              <span className="text-gray-500 text-xs mx-1">{language === 'zh' ? '分' : 'pt'}</span>
+              <span className="text-gray-600 text-xs mr-1">=</span>
+              <span className="font-mono text-xs text-purple-300 flex-1 text-right">{calculateTargetAmount(targetScore).toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Quantity Section */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400">{t('qtyLabel')}</label>
-          <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1 shrink-0">
+          <label className="text-[10px] font-medium text-gray-400">{t('qtyLabel')}</label>
+          <div className="grid grid-cols-4 gap-2">
             {/* Auto preset button */}
             <button
               onClick={handleAutoPresetSelect}
               disabled={autoAmount === null}
-              className={`relative px-2 py-3 rounded-md text-sm font-mono font-semibold transition-all border
+              className={`relative px-1 py-1 rounded-md text-xs font-mono font-semibold transition-all border
                 ${isAutoMode
-                  ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/50 cursor-pointer'
+                  ? 'bg-purple-600 border-purple-500 text-white shadow-sm shadow-purple-900/50 cursor-pointer'
                   : autoAmount === null
                     ? 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
                     : 'bg-purple-900/30 border-purple-700 text-purple-300 hover:bg-purple-800/50 hover:border-purple-600 cursor-pointer'
                 }`}
             >
-              <div className="flex flex-col items-center">
-                <span className="text-xs opacity-80">{t('autoPreset')}</span>
-                <span className="text-sm font-bold">
+              <div className="flex flex-col items-center justify-center h-full">
+                <span className="text-[9px] opacity-70 mb-0.5">{t('autoPreset')}</span>
+                <span className="font-bold leading-none">
                   {autoAmount === null
                     ? '...'
                     : autoAmount === 0
@@ -706,16 +706,16 @@ const App = ({ currentLanguage }) => {
               <button
                 key={preset.id}
                 onClick={() => handleQuantitySelect(preset.value)}
-                className={`relative group px-2 py-3 rounded-md text-sm font-mono font-semibold transition-all border cursor-pointer
+                className={`relative group px-1 py-1 rounded-md text-xs font-mono font-semibold transition-all border cursor-pointer flex items-center justify-center h-10
                   ${quantity === preset.value && !isAutoMode
-                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50'
+                    ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-900/50'
                     : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-750 hover:border-gray-600'
                   }`}
               >
                 {preset.value}
                 <div
                   onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
-                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex w-4 h-4 bg-red-500 rounded-full items-center justify-center cursor-pointer hover:bg-red-400"
+                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex w-4 h-4 bg-red-500 rounded-full items-center justify-center cursor-pointer hover:bg-red-400 z-10 shadow-sm"
                 >
                   <TrashIcon className="w-2.5 h-2.5 text-white" />
                 </div>
@@ -725,191 +725,198 @@ const App = ({ currentLanguage }) => {
 
           {/* Add Preset */}
           <div className="flex gap-2 mt-2">
-            <input
-              type="number"
-              value={newPresetVal}
-              onChange={(e) => setNewPresetVal(e.target.value)}
-              placeholder={t('addQtyPlaceholder')}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 placeholder-gray-600"
-            />
+            <div className="relative flex-1">
+              <input
+                type="number"
+                value={newPresetVal}
+                onChange={(e) => setNewPresetVal(e.target.value)}
+                placeholder={t('addQtyPlaceholder')}
+                className="w-full bg-gray-800 border border-gray-700 rounded-md pl-2 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-gray-600"
+              />
+            </div>
             <button
               onClick={handleAddPreset}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 border border-gray-600 cursor-pointer"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-md text-gray-300 border border-gray-600 cursor-pointer transition-colors"
             >
               <PlusIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Auto Submit Toggle */}
-        <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-3">
-          <label className="flex items-center space-x-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoSubmit}
-              onChange={handleAutoSubmitChange}
-              className="form-checkbox h-5 w-5 text-red-500 rounded border-gray-600 bg-gray-700 focus:ring-red-500"
-            />
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-red-400">{t('autoSubmit')}</span>
-              <span className="text-[10px] text-red-300/70">{t('autoSubmitDesc')}</span>
-            </div>
-          </label>
-        </div>
-
-        {/* Action Footer */}
-        <div className="mt-5 pt-4 border-t border-gray-800 space-y-3">
-          {/* 买入数量显示 */}
-          <div className="text-center py-2 bg-gray-800/50 rounded-lg border border-gray-700">
-            <span className="text-2xl font-bold font-mono text-green-400">
+        {/* Auto Submit Toggle & Buy Qty Display */}
+        <div className="flex gap-2 shrink-0">
+          <div className="flex-[0.8] bg-red-900/10 border border-red-900/30 rounded-md px-3 py-2 flex items-center transition-colors hover:bg-red-900/20">
+            <label className="flex items-center space-x-3 cursor-pointer w-full">
+              <input
+                type="checkbox"
+                checked={autoSubmit}
+                onChange={handleAutoSubmitChange}
+                className="form-checkbox h-4 w-4 text-red-500 rounded border-gray-600 bg-gray-700 focus:ring-red-500 cursor-pointer"
+              />
+              <span className="text-xs font-bold text-red-400 select-none">{t('autoSubmit')}</span>
+            </label>
+          </div>
+          <div className="flex-1 flex items-center justify-center bg-gray-800 rounded-md border border-gray-700 px-3">
+             <span className="text-base font-bold font-mono text-green-400 tracking-wide">
               {formatToK(estimatedBuyQuantity)}
             </span>
           </div>
+        </div>
 
-          {/* 自动填充按钮 */}
-          <button
-            onClick={handleExecute}
-            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer
-              ${autoSubmit
-                ? 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 shadow-red-900/20'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-900/20'
-              }`}
-          >
-            <BoltIcon className="w-5 h-5" />
-            {t('autoFill')}
-          </button>
-          {status && (
-            <div className={`text-center text-xs font-mono font-medium
-              ${status === t('success') ? 'text-green-400' : 'text-yellow-400'}
-            `}>
-              {status}
+        {/* Action Footer */}
+        <div className="mt-auto pt-2 border-t border-gray-800 space-y-3">
+          
+          <div className="grid grid-cols-2 gap-3">
+            {/* 自动填充按钮 */}
+            <button
+              onClick={handleExecute}
+              className={`flex items-center justify-center gap-2 text-white font-bold py-2.5 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer text-sm
+                ${autoSubmit
+                  ? 'bg-gradient-to-br from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 shadow-red-900/20'
+                  : 'bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-900/20'
+                }`}
+            >
+              <BoltIcon className="w-4 h-4" />
+              {t('autoFill')}
+            </button>
+
+            {/* 快速卖出按钮 */}
+            <button
+              onClick={handleQuickSell}
+              className="flex items-center justify-center gap-2 text-white font-bold py-2.5 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-br from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 shadow-orange-900/20 text-sm"
+            >
+              <BoltIcon className="w-4 h-4" />
+              {t('quickSell')}
+            </button>
+          </div>
+
+          {(status || quickSellStatus) && (
+            <div className="text-center text-[10px] font-mono font-bold truncate h-4 flex justify-center items-center gap-3">
+              {status && <span className={status === t('success') ? 'text-green-400' : 'text-yellow-400'}>{status}</span>}
+              {quickSellStatus && <span className={quickSellStatus === t('quickSellSuccess') ? 'text-green-400' : 'text-yellow-400'}>{quickSellStatus}</span>}
             </div>
           )}
 
-          {/* 快速卖出按钮 */}
-          <button
-            onClick={handleQuickSell}
-            className="w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 shadow-orange-900/20"
-          >
-            <BoltIcon className="w-5 h-5" />
-            {t('quickSell')}
-          </button>
-          {quickSellStatus && (
-            <div className={`text-center text-xs font-mono font-medium
-              ${quickSellStatus === t('quickSellSuccess') ? 'text-green-400' : 'text-yellow-400'}
-            `}>
-              {quickSellStatus}
-            </div>
-          )}
-
-          {/* 最大委托量信息显示 */}
-          {maxOrderInfo && (
-            <div className="mt-3 p-2 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
-                <span>{language === 'zh' ? '最大委托量' : 'Max Order'}</span>
-                <span className={`font-bold ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
-                  {maxOrderInfo.side === 'bid'
-                    ? (language === 'zh' ? '买单' : 'BUY')
-                    : (language === 'zh' ? '卖单' : 'SELL')}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className={`font-mono ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
-                  {maxOrderInfo.price.toFixed(8)}
-                </span>
-                <span className="font-mono font-bold text-yellow-400">
-                  {formatToK(maxOrderInfo.quantity)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* 根据委托数量自动填充按钮 */}
-          <button
-            onClick={handleFillByMaxOrder}
-            disabled={!maxOrderInfo}
-            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95
-              ${maxOrderInfo
-                ? 'bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 shadow-yellow-900/20 cursor-pointer'
-                : 'bg-gray-700 cursor-not-allowed opacity-50'
-              }`}
-          >
-            <BoltIcon className="w-5 h-5" />
-            {language === 'zh' ? '根据委托数量自动填充' : 'Fill by Max Order'}
-          </button>
+          {/* Max Order Info & Button Combined */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-2 space-y-2">
+             {maxOrderInfo ? (
+               <div className="flex justify-between items-center px-1">
+                 <div className="flex flex-col">
+                   <span className="text-[10px] text-gray-500 font-medium">
+                     {language === 'zh' ? '价格' : 'Price'}
+                     <span className={`ml-1 font-bold ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
+                       {maxOrderInfo.side === 'bid' ? (language === 'zh' ? '买' : 'BUY') : (language === 'zh' ? '卖' : 'SELL')}
+                     </span>
+                   </span>
+                   <span className={`font-mono font-bold text-sm ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
+                     {maxOrderInfo.price.toFixed(8)}
+                   </span>
+                 </div>
+                 <div className="flex flex-col items-end">
+                   <span className="text-[10px] text-gray-500 font-medium">{language === 'zh' ? '数量' : 'Qty'}</span>
+                   <span className="font-mono font-bold text-sm text-yellow-400">
+                      {formatToK(maxOrderInfo.quantity)}
+                   </span>
+                 </div>
+               </div>
+             ) : (
+                <div className="flex justify-between items-center px-1 opacity-50">
+                   <div className="flex flex-col">
+                     <span className="text-[10px] text-gray-500">{language === 'zh' ? '价格' : 'Price'}</span>
+                     <span className="font-mono text-sm text-gray-600">--.--</span>
+                   </div>
+                   <div className="flex flex-col items-end">
+                     <span className="text-[10px] text-gray-500">{language === 'zh' ? '数量' : 'Qty'}</span>
+                     <span className="font-mono text-sm text-gray-600">--</span>
+                   </div>
+                </div>
+             )}
+             
+            <button
+              onClick={handleFillByMaxOrder}
+              disabled={!maxOrderInfo}
+              className={`w-full flex items-center justify-center gap-1.5 text-white font-bold py-2 rounded-lg shadow-md transition-all active:scale-95 text-xs tracking-wide
+                ${maxOrderInfo
+                  ? 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 border border-gray-600 cursor-pointer'
+                  : 'bg-gray-800 border border-gray-700 text-gray-500 cursor-not-allowed'
+                }`}
+            >
+              <BoltIcon className="w-3.5 h-3.5" />
+              {language === 'zh' ? '根据委托数量填充' : 'Fill by Max Qty'}
+            </button>
+          </div>
         </div>
       </div>
       )}
 
       {/* Score Tab Content */}
       {activeTab === 'score' && (
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 space-y-3 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
 
         {/* 统计结果区域 */}
         {scoreStatus === 'done' && orders.length > 0 && (
           <>
             {/* 交易统计 */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
-                <ChartBarIcon className="w-4 h-4" />
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
+                <ChartBarIcon className="w-3.5 h-3.5" />
                 <span>{t('statsTitle')}</span>
               </label>
-              <div className="bg-gray-800 p-3 rounded-lg border border-gray-700 space-y-2">
+              <div className="bg-gray-800 p-2 rounded-lg border border-gray-700 space-y-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('buyTotal')}</span>
+                  <span className="text-gray-400 text-xs">{t('buyTotal')}</span>
                   <span className="font-mono font-semibold text-green-400 text-xs">
-                    {stats.buyTotal.toFixed(6)} USDT
-                    <span className="text-gray-500 text-xs ml-2">({stats.buyCount} {t('txUnit')})</span>
+                    {stats.buyTotal.toFixed(2)}
+                    <span className="text-gray-500 text-[10px] ml-1">({stats.buyCount})</span>
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('sellTotal')}</span>
+                  <span className="text-gray-400 text-xs">{t('sellTotal')}</span>
                   <span className="font-mono font-semibold text-red-400 text-xs">
-                    {stats.sellTotal.toFixed(6)} USDT
-                    <span className="text-gray-500 text-xs ml-2">({stats.sellCount} {t('txUnit')})</span>
+                    {stats.sellTotal.toFixed(2)}
+                    <span className="text-gray-500 text-[10px] ml-1">({stats.sellCount})</span>
                   </span>
                 </div>
               </div>
             </div>
 
             {/* 损耗结果 和 得分 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {/* 损耗 */}
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
-                  <CalculatorIcon className="w-4 h-4" />
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
+                  <CalculatorIcon className="w-3.5 h-3.5" />
                   <span>{t('lossTitle')}</span>
                 </label>
-                <div className={`p-3 rounded-lg border ${loss >= 0 ? 'bg-red-900/20 border-red-900/50' : 'bg-green-900/20 border-green-900/50'}`}>
-                  <div className={`text-xl font-bold font-mono text-center ${loss >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                <div className={`p-2 rounded-lg border ${loss >= 0 ? 'bg-red-900/20 border-red-900/50' : 'bg-green-900/20 border-green-900/50'}`}>
+                  <div className={`text-lg font-bold font-mono text-center ${loss >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                     {loss >= 0 ? '-' : '+'}{Math.abs(loss).toFixed(2)}
                   </div>
-                  <p className="text-[10px] text-gray-500 text-center mt-1">USDT</p>
+                  <p className="text-[10px] text-gray-500 text-center">USDT</p>
                 </div>
               </div>
 
               {/* 得分 */}
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
-                  <StarIcon className="w-4 h-4" />
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
+                  <StarIcon className="w-3.5 h-3.5" />
                   <span>{t('scoreTitle')}</span>
                 </label>
-                <div className="p-3 rounded-lg border bg-amber-900/20 border-amber-900/50">
-                  <div className="text-xl font-bold font-mono text-center text-amber-400">
+                <div className="p-2 rounded-lg border bg-amber-900/20 border-amber-900/50">
+                  <div className="text-lg font-bold font-mono text-center text-amber-400">
                     {scoreData.score}
                   </div>
-                  <p className="text-[10px] text-gray-500 text-center mt-1">{language === 'zh' ? '分' : 'pts'}</p>
+                  <p className="text-[10px] text-gray-500 text-center">{language === 'zh' ? '分' : 'pts'}</p>
                 </div>
               </div>
             </div>
 
             {/* 公式说明 */}
-            <div className="text-[10px] text-gray-500 space-y-1">
-              <p>{t('formula')}</p>
+            <div className="text-[10px] text-gray-500 space-y-0.5">
               <p>{t('scoreFormula')} = {scoreData.adjustedAmount.toFixed(2)} U</p>
               {airdrops.length > 0 && (
-                <p className="text-yellow-500">
-                  {t('airdropDeducted')}: {airdropAmount.toFixed(2)} USDT ({airdrops.map(a => a.token).join(', ')})
+                <p className="text-yellow-500 truncate">
+                  {t('airdropDeducted')}: {airdropAmount.toFixed(2)} ({airdrops.length})
                 </p>
               )}
             </div>
@@ -918,30 +925,30 @@ const App = ({ currentLanguage }) => {
 
         {/* 无数据提示 */}
         {scoreStatus === 'done' && orders.length === 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
-            <p className="text-gray-400">{t('noOrders')}</p>
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
+            <p className="text-gray-400 text-sm">{t('noOrders')}</p>
           </div>
         )}
 
         {/* 错误提示 */}
         {scoreStatus === 'error' && (
-          <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-4 text-center">
-            <p className="text-red-400">{errorMsg || t('failed')}</p>
+          <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-3 text-center">
+            <p className="text-red-400 text-sm">{errorMsg || t('failed')}</p>
           </div>
         )}
 
         {/* 操作按钮 */}
-        <div className="mt-5 pt-4 border-t border-gray-800">
+        <div className="mt-auto pt-2 border-t border-gray-800">
           <button
             onClick={handleCalculateScore}
             disabled={scoreStatus === 'loading'}
-            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl shadow-lg transition-all
+            className={`w-full flex items-center justify-center gap-2 text-white font-bold py-2 rounded-lg shadow-lg transition-all
               ${scoreStatus === 'loading'
                 ? 'bg-gray-600 cursor-not-allowed'
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 cursor-pointer'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 cursor-pointer text-sm'
               }`}
           >
-            <ArrowPathIcon className={`w-5 h-5 ${scoreStatus === 'loading' ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon className={`w-4 h-4 ${scoreStatus === 'loading' ? 'animate-spin' : ''}`} />
             {scoreStatus === 'loading' ? t('calculating') : (scoreStatus === 'done' ? t('recalculate') : t('calcScore'))}
           </button>
         </div>

@@ -53,7 +53,7 @@ const DevContainer = () => {
 
   return (
     <div style={{
-      width: '360px',
+      width: '400px',
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
       borderRadius: '12px',
       overflow: 'hidden',

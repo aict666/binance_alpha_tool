@@ -126,8 +126,7 @@ const FloatingWindow = ({ children, onClose, visible }) => {
       {/* 内容区域 */}
       <div style={{
         background: '#111827',
-        maxHeight: '600px',
-        overflowY: 'auto'
+        overflow: 'hidden'
       }}>
         {cloneElement(children, { currentLanguage: language })}
       </div>
