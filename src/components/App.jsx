@@ -170,8 +170,10 @@ const App = ({ currentLanguage }) => {
 
   // Current price state for real-time display
   const [currentPrice, setCurrentPrice] = useState(null);
-  // 最大委托量信息 { price, quantity, side: 'bid'|'ask' }
-  const [maxOrderInfo, setMaxOrderInfo] = useState(null);
+  // 买单最大委托量信息 { price, quantity }
+  const [maxBidOrder, setMaxBidOrder] = useState(null);
+  // 卖单最大委托量信息 { price, quantity }
+  const [maxAskOrder, setMaxAskOrder] = useState(null);
 
   // Helper for translations
   const t = (key) => translations[language][key];
@@ -253,12 +255,13 @@ const App = ({ currentLanguage }) => {
     return num;
   }, []);
 
-  // 获取订单簿中最大委托量的订单
+  // 获取订单簿中买单和卖单各自的最大委托量
   const fetchMaxOrder = useCallback(() => {
     try {
-      let maxOrder = { price: 0, quantity: 0, side: '' };
+      let maxBid = { price: 0, quantity: 0 };
+      let maxAsk = { price: 0, quantity: 0 };
 
-      // 解析卖单 (ask)
+      // 解析卖单 (ask) - 找出卖单最大
       const askList = document.querySelector('.orderbook-ask');
       if (askList) {
         const askRows = askList.querySelectorAll('.orderbook-progress');
@@ -268,14 +271,14 @@ const App = ({ currentLanguage }) => {
           if (priceEl && qtyEl) {
             const price = parseFloat(priceEl.innerText);
             const qty = parseQuantityText(qtyEl.innerText);
-            if (qty > maxOrder.quantity) {
-              maxOrder = { price, quantity: qty, side: 'ask' };
+            if (qty > maxAsk.quantity) {
+              maxAsk = { price, quantity: qty };
             }
           }
         });
       }
 
-      // 解析买单 (bid)
+      // 解析买单 (bid) - 找出买单最大
       const bidList = document.querySelector('.orderbook-bid');
       if (bidList) {
         const bidRows = bidList.querySelectorAll('.orderbook-progress');
@@ -285,15 +288,19 @@ const App = ({ currentLanguage }) => {
           if (priceEl && qtyEl) {
             const price = parseFloat(priceEl.innerText);
             const qty = parseQuantityText(qtyEl.innerText);
-            if (qty > maxOrder.quantity) {
-              maxOrder = { price, quantity: qty, side: 'bid' };
+            if (qty > maxBid.quantity) {
+              maxBid = { price, quantity: qty };
             }
           }
         });
       }
 
-      if (maxOrder.quantity > 0) {
-        setMaxOrderInfo(maxOrder);
+      // 分别更新买单和卖单的最大委托
+      if (maxBid.quantity > 0) {
+        setMaxBidOrder(maxBid);
+      }
+      if (maxAsk.quantity > 0) {
+        setMaxAskOrder(maxAsk);
       }
     } catch (e) {
       console.error('[TradeAssist] 获取最大委托量失败:', e);
@@ -492,16 +499,18 @@ const App = ({ currentLanguage }) => {
   };
 
   // 根据最大委托量价格自动填充（使用预设数量）
-  const handleFillByMaxOrder = async () => {
-    if (!maxOrderInfo) {
-      setStatus('未找到委托数据');
+  // side: 'bid' 使用买单最大, 'ask' 使用卖单最大
+  const handleFillByMaxOrder = async (side) => {
+    const orderInfo = side === 'bid' ? maxBidOrder : maxAskOrder;
+    if (!orderInfo) {
+      setStatus(language === 'zh' ? '未找到委托数据' : 'No order data');
       return;
     }
 
     // 使用最大委托量的价格，但数量用预设的 quantity
     setStatus(t('executing'));
     try {
-      const result = await executeFillWithPrice(maxOrderInfo.price, offset, quantity, autoSubmit);
+      const result = await executeFillWithPrice(orderInfo.price, offset, quantity, autoSubmit);
       if (result.success) {
         setStatus(t('success'));
         setTimeout(() => setStatus(''), 2000);
@@ -797,53 +806,83 @@ const App = ({ currentLanguage }) => {
             </div>
           )}
 
-          {/* Max Order Info & Button Combined */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-2 space-y-2">
-             {maxOrderInfo ? (
-               <div className="flex justify-between items-center px-1">
-                 <div className="flex flex-col">
-                   <span className="text-[10px] text-gray-500 font-medium">
-                     {language === 'zh' ? '价格' : 'Price'}
-                     <span className={`ml-1 font-bold ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
-                       {maxOrderInfo.side === 'bid' ? (language === 'zh' ? '买' : 'BUY') : (language === 'zh' ? '卖' : 'SELL')}
-                     </span>
-                   </span>
-                   <span className={`font-mono font-bold text-sm ${maxOrderInfo.side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
-                     {maxOrderInfo.price.toFixed(8)}
-                   </span>
-                 </div>
-                 <div className="flex flex-col items-end">
-                   <span className="text-[10px] text-gray-500 font-medium">{language === 'zh' ? '数量' : 'Qty'}</span>
-                   <span className="font-mono font-bold text-sm text-yellow-400">
-                      {formatToK(maxOrderInfo.quantity)}
-                   </span>
-                 </div>
-               </div>
-             ) : (
-                <div className="flex justify-between items-center px-1 opacity-50">
-                   <div className="flex flex-col">
-                     <span className="text-[10px] text-gray-500">{language === 'zh' ? '价格' : 'Price'}</span>
-                     <span className="font-mono text-sm text-gray-600">--.--</span>
-                   </div>
-                   <div className="flex flex-col items-end">
-                     <span className="text-[10px] text-gray-500">{language === 'zh' ? '数量' : 'Qty'}</span>
-                     <span className="font-mono text-sm text-gray-600">--</span>
-                   </div>
+          {/* Max Order Info - 买最大和卖最大并排显示 */}
+          {/* 价差显示 */}
+          {maxBidOrder && maxAskOrder && (
+            <div className="text-center text-xs text-gray-400 mb-1">
+              <span>{language === 'zh' ? '价差' : 'Spread'}: </span>
+              <span className="text-yellow-400 font-mono font-bold">
+                {(maxAskOrder.price - maxBidOrder.price).toFixed(8)}
+              </span>
+              <span className="text-gray-500 ml-1">
+                ({((maxAskOrder.price - maxBidOrder.price) / maxBidOrder.price * 100).toFixed(2)}%)
+              </span>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {/* 买单最大 */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-2 space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    <span className="text-green-400 font-bold">{language === 'zh' ? '买最大' : 'BID MAX'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-sm text-green-400">
+                    {maxBidOrder ? maxBidOrder.price.toFixed(8) : '--.--'}
+                  </span>
                 </div>
-             )}
-             
-            <button
-              onClick={handleFillByMaxOrder}
-              disabled={!maxOrderInfo}
-              className={`w-full flex items-center justify-center gap-1.5 text-white font-bold py-2 rounded-lg shadow-md transition-all active:scale-95 text-xs tracking-wide
-                ${maxOrderInfo
-                  ? 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 border border-gray-600 cursor-pointer'
-                  : 'bg-gray-800 border border-gray-700 text-gray-500 cursor-not-allowed'
-                }`}
-            >
-              <BoltIcon className="w-3.5 h-3.5" />
-              {language === 'zh' ? '根据委托数量填充' : 'Fill by Max Qty'}
-            </button>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-gray-500 font-medium">{language === 'zh' ? '数量' : 'Qty'}</span>
+                  <span className="font-mono font-bold text-sm text-yellow-400">
+                    {maxBidOrder ? formatToK(maxBidOrder.quantity) : '--'}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleFillByMaxOrder('bid')}
+                disabled={!maxBidOrder}
+                className={`w-full flex items-center justify-center gap-1 text-white font-bold py-1.5 rounded-lg shadow-md transition-all active:scale-95 text-[10px] tracking-wide
+                  ${maxBidOrder
+                    ? 'bg-gradient-to-r from-green-700 to-green-600 hover:from-green-600 hover:to-green-500 border border-green-600 cursor-pointer'
+                    : 'bg-gray-800 border border-gray-700 text-gray-500 cursor-not-allowed'
+                  }`}
+              >
+                <BoltIcon className="w-3 h-3" />
+                {language === 'zh' ? '买最大填充' : 'Fill Bid'}
+              </button>
+            </div>
+
+            {/* 卖单最大 */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-2 space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    <span className="text-red-400 font-bold">{language === 'zh' ? '卖最大' : 'ASK MAX'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-sm text-red-400">
+                    {maxAskOrder ? maxAskOrder.price.toFixed(8) : '--.--'}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-gray-500 font-medium">{language === 'zh' ? '数量' : 'Qty'}</span>
+                  <span className="font-mono font-bold text-sm text-yellow-400">
+                    {maxAskOrder ? formatToK(maxAskOrder.quantity) : '--'}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleFillByMaxOrder('ask')}
+                disabled={!maxAskOrder}
+                className={`w-full flex items-center justify-center gap-1 text-white font-bold py-1.5 rounded-lg shadow-md transition-all active:scale-95 text-[10px] tracking-wide
+                  ${maxAskOrder
+                    ? 'bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 border border-red-600 cursor-pointer'
+                    : 'bg-gray-800 border border-gray-700 text-gray-500 cursor-not-allowed'
+                  }`}
+              >
+                <BoltIcon className="w-3 h-3" />
+                {language === 'zh' ? '卖最大填充' : 'Fill Ask'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
