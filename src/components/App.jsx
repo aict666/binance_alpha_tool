@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Cog6ToothIcon, PlusIcon, TrashIcon, BoltIcon, ChartBarIcon, CalculatorIcon, StarIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
-import { executeFill, executeQuickSell, executeFillWithPrice } from '../content/fill-logic';
+import { executeFill, executeQuickSell, executeFillWithPrice, executeCancelAll } from '../content/fill-logic';
 import {
   collectOrdersFromTable,
   detectAirdrops,
@@ -62,7 +62,13 @@ const translations = {
     sellTabNotFound: '未找到卖出标签页',
     priceNotFound: '未找到当前价格',
     amountDivNotFound: '未找到持仓数量',
-    sellButtonNotFound: '未找到卖出按钮'
+    sellButtonNotFound: '未找到卖出按钮',
+    // Cancel all
+    cancelAll: '全部取消',
+    cancelAllExecuting: '取消中...',
+    cancelAllSuccess: '已取消!',
+    openOrdersTabNotFound: '未找到"当前委托"标签页',
+    cancelAllBtnNotFound: '未找到"全部取消"按钮'
   },
   en: {
     title: 'Binance Alpha Assistant',
@@ -116,7 +122,13 @@ const translations = {
     sellTabNotFound: 'Sell tab not found',
     priceNotFound: 'Price not found',
     amountDivNotFound: 'Holdings not found',
-    sellButtonNotFound: 'Sell button not found'
+    sellButtonNotFound: 'Sell button not found',
+    // Cancel all
+    cancelAll: 'Cancel All',
+    cancelAllExecuting: 'Cancelling...',
+    cancelAllSuccess: 'Cancelled!',
+    openOrdersTabNotFound: 'Open Orders tab not found',
+    cancelAllBtnNotFound: 'Cancel All button not found'
   }
 };
 
@@ -153,6 +165,7 @@ const App = ({ currentLanguage }) => {
   const [newPresetVal, setNewPresetVal] = useState('');
   const [status, setStatus] = useState('');
   const [quickSellStatus, setQuickSellStatus] = useState('');
+  const [cancelAllStatus, setCancelAllStatus] = useState('');
 
   // Target score related state
   const [targetScore, setTargetScore] = useState(DEFAULT_SETTINGS.targetScore);
@@ -498,6 +511,30 @@ const App = ({ currentLanguage }) => {
     }
   };
 
+  // 全部取消处理函数
+  const handleCancelAll = async () => {
+    setCancelAllStatus(t('cancelAllExecuting'));
+
+    try {
+      const result = await executeCancelAll();
+
+      if (result.success) {
+        setCancelAllStatus(t('cancelAllSuccess'));
+        setTimeout(() => setCancelAllStatus(''), 2000);
+      } else {
+        const errorCodeMap = {
+          'OPEN_ORDERS_TAB_NOT_FOUND': 'openOrdersTabNotFound',
+          'CANCEL_ALL_BTN_NOT_FOUND': 'cancelAllBtnNotFound'
+        };
+        const errorKey = result.errorCode && errorCodeMap[result.errorCode];
+        setCancelAllStatus(errorKey ? t(errorKey) : (result.message || t('failed')));
+      }
+    } catch (e) {
+      setCancelAllStatus(t('failed'));
+      console.error(e);
+    }
+  };
+
   // 根据最大委托量价格自动填充（使用预设数量）
   // side: 'bid' 使用买单最大, 'ask' 使用卖单最大
   const handleFillByMaxOrder = async (side) => {
@@ -799,10 +836,19 @@ const App = ({ currentLanguage }) => {
             </button>
           </div>
 
-          {(status || quickSellStatus) && (
+          {/* 全部取消按钮 */}
+          <button
+            onClick={handleCancelAll}
+            className="w-full flex items-center justify-center gap-2 text-white font-bold py-2 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 border border-gray-500 text-sm"
+          >
+            {t('cancelAll')}
+          </button>
+
+          {(status || quickSellStatus || cancelAllStatus) && (
             <div className="text-center text-[10px] font-mono font-bold truncate h-4 flex justify-center items-center gap-3">
               {status && <span className={status === t('success') ? 'text-green-400' : 'text-yellow-400'}>{status}</span>}
               {quickSellStatus && <span className={quickSellStatus === t('quickSellSuccess') ? 'text-green-400' : 'text-yellow-400'}>{quickSellStatus}</span>}
+              {cancelAllStatus && <span className={cancelAllStatus === t('cancelAllSuccess') ? 'text-green-400' : 'text-yellow-400'}>{cancelAllStatus}</span>}
             </div>
           )}
 

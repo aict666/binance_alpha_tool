@@ -341,6 +341,54 @@ export async function executeQuickSell() {
   }
 }
 
+// 全部取消：切换到当前委托tab，点击全部取消
+export async function executeCancelAll() {
+  try {
+    console.log("[TradeAssist] 开始执行全部取消");
+
+    // Step 1: 切换到"当前委托"tab
+    const openOrdersTab = document.querySelector('#bn-tab-orderOrder') ||
+                          document.querySelector('[data-tab-key="orderOrder"]');
+
+    if (!openOrdersTab) {
+      return {
+        success: false,
+        message: '未找到"当前委托"标签页',
+        errorCode: 'OPEN_ORDERS_TAB_NOT_FOUND'
+      };
+    }
+
+    if (openOrdersTab.getAttribute('aria-selected') !== 'true') {
+      console.log("[TradeAssist] 切换到当前委托");
+      openOrdersTab.click();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Step 2: 点击全部取消
+    const cancelAllBtn = document.querySelector("#bn-tab-pane-orderOrder > div > div.bn-web-table-wrapper.bn-web-table-wrapper__filled.bn-web-table-wrapper__row-small.bn-web-table-wrapper__padding-default > div > div > div.bn-web-table-header > table > thead > tr > th:nth-child(11) > div");
+
+    if (!cancelAllBtn) {
+      return {
+        success: false,
+        message: '未找到"全部取消"按钮',
+        errorCode: 'CANCEL_ALL_BTN_NOT_FOUND'
+      };
+    }
+
+    console.log("[TradeAssist] 点击全部取消");
+    cancelAllBtn.click();
+
+    return {
+      success: true,
+      message: '全部取消执行成功'
+    };
+
+  } catch (error) {
+    console.error("[TradeAssist] 全部取消错误:", error);
+    return { success: false, message: error.message };
+  }
+}
+
 // 根据指定价格填充（用于最大委托量填充）
 export async function executeFillWithPrice(targetPrice, offsetTicks, quantity, autoSubmit = false) {
   try {
