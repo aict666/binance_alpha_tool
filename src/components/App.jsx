@@ -853,6 +853,38 @@ const App = ({ currentLanguage }) => {
           )}
 
           {/* Max Order Info - 买最大和卖最大并排显示 */}
+          {/* 当前价格 */}
+          {currentPrice && (
+            <div className="text-center text-sm mb-1">
+              <span className="text-gray-400">{language === 'zh' ? '当前价格' : 'Price'}: </span>
+              <span className="text-white font-mono font-bold">{currentPrice.toFixed(8)}</span>
+            </div>
+          )}
+
+          {/* 当前价格距买卖最大价差 */}
+          {currentPrice && maxBidOrder && maxAskOrder && (
+            <div className="flex justify-center gap-4 text-[10px] text-gray-400 mb-1">
+              <span>
+                {language === 'zh' ? '距买最大' : 'To Bid'}:
+                <span className="text-green-400 font-mono font-bold ml-1">
+                  {(currentPrice - maxBidOrder.price).toFixed(8)}
+                </span>
+                <span className="text-gray-500 ml-1">
+                  ({((currentPrice - maxBidOrder.price) / currentPrice * 100).toFixed(2)}%)
+                </span>
+              </span>
+              <span>
+                {language === 'zh' ? '距卖最大' : 'To Ask'}:
+                <span className="text-red-400 font-mono font-bold ml-1">
+                  {(maxAskOrder.price - currentPrice).toFixed(8)}
+                </span>
+                <span className="text-gray-500 ml-1">
+                  ({((maxAskOrder.price - currentPrice) / currentPrice * 100).toFixed(2)}%)
+                </span>
+              </span>
+            </div>
+          )}
+
           {/* 价差显示 */}
           {maxBidOrder && maxAskOrder && (
             <div className="text-center text-xs text-gray-400 mb-1">
