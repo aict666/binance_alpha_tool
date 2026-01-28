@@ -6,7 +6,9 @@ import {
   detectAirdrops,
   calculateStats,
   calculateLoss,
-  calculateTodayScore
+  calculateTodayScore,
+  parseDateTime,
+  isInTodayPeriod
 } from '../content/score-calculator';
 
 const translations = {
@@ -591,68 +593,28 @@ const App = ({ currentLanguage }) => {
     return calculateTodayScore(orders);
   }, [orders]);
 
-  // 等待包含特定文字的筛选面板出现
-  const waitForFilterPanel = (timeout = 3000) => {
-    return new Promise((resolve) => {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        const bubbles = document.querySelectorAll('.bn-bubble-content');
-        for (const b of bubbles) {
-          if (b.textContent.includes('已成交') && b.textContent.includes('已过期')) {
-            clearInterval(interval);
-            resolve(b);
-            return;
-          }
-        }
-        if (++attempts > timeout / 100) {
-          clearInterval(interval);
-          resolve(null);
-        }
-      }, 100);
-    });
-  };
-
-  // 应用状态筛选：只勾选"已成交"和"部分成交"
-  const applyStatusFilter = async () => {
-    // 点击状态列头打开筛选下拉
-    const statusHeader = document.querySelector(
-      '#trd-order-history > div > div.relative > div > div > div > div.bn-web-table-header > table > thead > tr > th:nth-child(14) > div > div'
+  // 自动滚动表格，直到出现非今日数据或滚到底
+  const scrollToLoadAll = async () => {
+    const container = document.querySelector(
+      '#trd-order-history > div > div.relative > div > div > div > div.bn-web-table-body'
     );
-    if (!statusHeader) return;
-    statusHeader.click();
+    if (!container) return;
 
-    // 等待筛选面板出现（通过内容文字精确匹配）
-    const bubble = await waitForFilterPanel();
-    if (!bubble) return;
-
-    const items = bubble.querySelectorAll(':scope > div > div');
-    // items[0]=全部, [1]=已成交, [2]=部分成交, [3]=已过期, [4]=已取消, [5]=已拒绝
-    // 先取消不需要的: 已过期(3), 已取消(4), 已拒绝(5)
-    for (let i = 3; i < items.length; i++) {
-      const checkbox = items[i].querySelector('[role="checkbox"]');
-      if (checkbox?.getAttribute('aria-checked') === 'true') {
-        items[i].click();
-        await new Promise(r => setTimeout(r, 500));
+    let lastScrollTop = -1;
+    while (container.scrollTop !== lastScrollTop) {
+      // 检查当前可见的最后一行是否已超出今日周期
+      const rows = container.querySelectorAll('tr.bn-web-table-row');
+      if (rows.length > 0) {
+        const lastRow = rows[rows.length - 1];
+        const timeCell = lastRow.querySelector('td[aria-colindex="1"]');
+        const time = parseDateTime(timeCell?.textContent);
+        if (time && !isInTodayPeriod(time)) break;
       }
+      lastScrollTop = container.scrollTop;
+      container.scrollTop = container.scrollHeight;
+      await new Promise(r => setTimeout(r, 500));
     }
-    // 确保 已成交(1) 和 部分成交(2) 是勾选的
-    for (let i = 1; i <= 2; i++) {
-      if (i >= items.length) break;
-      const checkbox = items[i].querySelector('[role="checkbox"]');
-      if (checkbox?.getAttribute('aria-checked') !== 'true') {
-        items[i].click();
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-
-    // 点击搜索按钮
-    const searchBtn = document.querySelector(
-      '#trd-order-history > div > div.bn-flex.my-\\[8px\\].items-center.flex-row.justify-start > div.font-\\[500\\] > div > div.bn-flex.items-center > button'
-    );
-    if (searchBtn) {
-      searchBtn.click();
-      await new Promise(r => setTimeout(r, 1000));
-    }
+    container.scrollTop = 0;
   };
 
   // 开始计算刷分
@@ -663,7 +625,7 @@ const App = ({ currentLanguage }) => {
     setAirdrops([]);
 
     try {
-      // 确保历史委托标签已打开
+      // 如果表格不存在，尝试切换到历史委托标签
       const tbody = document.querySelector('#trd-order-history tbody');
       if (!tbody) {
         const historyTab = document.querySelector('#bn-tab-orderHistory') ||
@@ -674,8 +636,8 @@ const App = ({ currentLanguage }) => {
         }
       }
 
-      // 应用状态筛选：只保留"已成交"和"部分成交"
-      await applyStatusFilter();
+      // 自动滚动加载所有数据
+      await scrollToLoadAll();
 
       // 获取数据
       let result = collectOrdersFromTable();
