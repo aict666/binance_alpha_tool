@@ -295,6 +295,7 @@ const App = ({ currentLanguage }) => {
           const qtyEl = row.querySelector('.text.emit-price span');
           if (priceEl && qtyEl) {
             const price = parseFloat(priceEl.innerText);
+            if (currentPrice !== null && price === currentPrice) return;
             const qty = parseQuantityText(qtyEl.innerText);
             if (qty > maxAsk.quantity) {
               maxAsk = { price, quantity: qty };
@@ -312,6 +313,7 @@ const App = ({ currentLanguage }) => {
           const qtyEl = row.querySelector('.text.emit-price span');
           if (priceEl && qtyEl) {
             const price = parseFloat(priceEl.innerText);
+            if (currentPrice !== null && price === currentPrice) return;
             const qty = parseQuantityText(qtyEl.innerText);
             if (qty > maxBid.quantity) {
               maxBid = { price, quantity: qty };
@@ -330,7 +332,7 @@ const App = ({ currentLanguage }) => {
     } catch (e) {
       console.error('[TradeAssist] 获取最大委托量失败:', e);
     }
-  }, [parseQuantityText]);
+  }, [parseQuantityText, currentPrice]);
 
   // 实时刷新最大委托量（200ms）
   useEffect(() => {
@@ -1011,6 +1013,11 @@ const App = ({ currentLanguage }) => {
                   <span className="font-mono font-bold text-sm text-yellow-400">
                     {maxBidOrder ? formatToK(maxBidOrder.quantity) : '--'}
                   </span>
+                  {maxBidOrder && estimatedBuyQuantity ? (
+                    <span className="font-mono text-[10px] text-cyan-400">
+                      x{(maxBidOrder.quantity / estimatedBuyQuantity).toFixed(1)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <button
@@ -1043,6 +1050,11 @@ const App = ({ currentLanguage }) => {
                   <span className="font-mono font-bold text-sm text-yellow-400">
                     {maxAskOrder ? formatToK(maxAskOrder.quantity) : '--'}
                   </span>
+                  {maxAskOrder && estimatedBuyQuantity ? (
+                    <span className="font-mono text-[10px] text-cyan-400">
+                      x{(maxAskOrder.quantity / estimatedBuyQuantity).toFixed(1)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <button
