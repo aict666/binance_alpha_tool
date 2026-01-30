@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Cog6ToothIcon, PlusIcon, TrashIcon, BoltIcon, ChartBarIcon, CalculatorIcon, StarIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
 import { executeFill, executeQuickSell, executeFillWithPrice, executeCancelAll } from '../content/fill-logic';
 import {
@@ -166,6 +166,7 @@ const App = ({ currentLanguage }) => {
   const [autoSubmit, setAutoSubmit] = useState(DEFAULT_SETTINGS.autoSubmit || false);
   const [newPresetVal, setNewPresetVal] = useState('');
   const [status, setStatus] = useState('');
+  const statusTimerRef = useRef(null);
   const [quickSellStatus, setQuickSellStatus] = useState('');
   const [cancelAllStatus, setCancelAllStatus] = useState('');
 
@@ -464,7 +465,8 @@ const App = ({ currentLanguage }) => {
 
       if (result.success) {
         setStatus(t('success'));
-        setTimeout(() => setStatus(''), 2000);
+        clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = setTimeout(() => setStatus(''), 2000);
       } else {
         // 映射错误码到翻译消息
         const errorCodeMap = {
@@ -551,8 +553,14 @@ const App = ({ currentLanguage }) => {
     try {
       const result = await executeFillWithPrice(orderInfo.price, offset, quantity, autoSubmit);
       if (result.success) {
-        setStatus(t('success'));
-        setTimeout(() => setStatus(''), 2000);
+        clearTimeout(statusTimerRef.current);
+        const sideLabel = side === 'bid' ? '买' : '卖';
+        const priceStr = orderInfo.price.toFixed(8);
+        const qtyStr = formatToK(orderInfo.quantity);
+        setStatus(language === 'zh'
+          ? `✓ ${sideLabel}最大 价:${priceStr} 量:${qtyStr}`
+          : `✓ ${side.toUpperCase()} P:${priceStr} Q:${qtyStr}`);
+        statusTimerRef.current = setTimeout(() => setStatus(''), 5000);
       } else {
         const errorCodeMap = {
           'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
