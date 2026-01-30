@@ -70,7 +70,9 @@ const translations = {
     cancelAllExecuting: '取消中...',
     cancelAllSuccess: '已取消!',
     openOrdersTabNotFound: '未找到"当前委托"标签页',
-    cancelAllBtnNotFound: '未找到"全部取消"按钮'
+    cancelAllBtnNotFound: '未找到"全部取消"按钮',
+    // Alpha listing
+    alpha4xRemaining: '4x剩余{remain}天',
   },
   en: {
     title: 'Binance Alpha Assistant',
@@ -130,7 +132,9 @@ const translations = {
     cancelAllExecuting: 'Cancelling...',
     cancelAllSuccess: 'Cancelled!',
     openOrdersTabNotFound: 'Open Orders tab not found',
-    cancelAllBtnNotFound: 'Cancel All button not found'
+    cancelAllBtnNotFound: 'Cancel All button not found',
+    // Alpha listing
+    alpha4xRemaining: '4x {remain}d left',
   }
 };
 
@@ -183,6 +187,11 @@ const App = ({ currentLanguage }) => {
   const [orders, setOrders] = useState([]);
   const [airdrops, setAirdrops] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Alpha token listing info
+  const [alphaTokenInfo, setAlphaTokenInfo] = useState(null); // { symbol, daysListed, daysRemaining }
+  const alphaTokenCacheRef = useRef(null);
+  const lastSymbolRef = useRef(null);
 
   // Current price state for real-time display
   const [currentPrice, setCurrentPrice] = useState(null);
@@ -329,6 +338,57 @@ const App = ({ currentLanguage }) => {
     const interval = setInterval(fetchMaxOrder, 200);
     return () => clearInterval(interval);
   }, [fetchMaxOrder]);
+
+  // 组件挂载时请求一次 Alpha token 列表，然后轮询 DOM 读取 symbol 匹配
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list');
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.code === '000000' && json.data) {
+          alphaTokenCacheRef.current = json.data;
+        }
+      } catch (e) {
+        console.error('[TradeAssist] 获取Alpha代币列表失败:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 轮询 DOM 读取当前 symbol，匹配已缓存的 token 列表
+  useEffect(() => {
+    const checkSymbol = () => {
+      const tokenList = alphaTokenCacheRef.current;
+      if (!tokenList) return;
+
+      const symbolEl = document.querySelector("#__APP > div > div.h-\\[56px\\].bg-BasicBg.my-\\[4px\\] > div > div > div.bn-flex.items-center.gap-\\[8px\\] > div.min-w-\\[57px\\].ml-\\[8px\\] > div.text-\\[20px\\].font-\\[600\\].leading-\\[24px\\].text-PrimaryText");
+      if (!symbolEl) return;
+      const symbol = symbolEl.textContent.trim();
+      if (!symbol || symbol === lastSymbolRef.current) return;
+      lastSymbolRef.current = symbol;
+
+      const token = tokenList.find(t => t.symbol.toUpperCase() === symbol.toUpperCase());
+      if (!token || !token.listingTime) {
+        setAlphaTokenInfo(null);
+        return;
+      }
+
+      const daysListed = Math.floor((Date.now() - token.listingTime) / (1000 * 60 * 60 * 24));
+      const daysRemaining = 30 - daysListed;
+
+      if (daysRemaining > 0) {
+        setAlphaTokenInfo({ symbol, daysListed: daysListed + 1, daysRemaining });
+      } else {
+        setAlphaTokenInfo(null);
+      }
+    };
+
+    checkSymbol();
+    const interval = setInterval(checkSymbol, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   // 同步外部语言变化
   useEffect(() => {
@@ -883,7 +943,13 @@ const App = ({ currentLanguage }) => {
             </div>
           )}
 
-          {/* Max Order Info - 买最大和卖最大并排显示 */}
+          {/* Alpha 4x 剩余天数 */}
+          {alphaTokenInfo && (
+            <div className={`text-center text-xs font-bold ${alphaTokenInfo.daysRemaining <= 7 ? 'text-red-400' : 'text-green-400'}`}>
+              {alphaTokenInfo.symbol} · {t('alpha4xRemaining').replace('{remain}', alphaTokenInfo.daysRemaining)}
+            </div>
+          )}
+
           {/* 当前价格 */}
           {currentPrice && (
             <div className="text-center text-sm mb-1">
@@ -1102,6 +1168,13 @@ const App = ({ currentLanguage }) => {
         </div>
       </div>
       )}
+
+      {/* 版权 */}
+      <div className="text-center text-[10px] text-gray-600 pt-1 shrink-0">
+        <a href="https://x.com/AI_CT_66" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">
+          © AI_CT_66
+        </a>
+      </div>
     </div>
   );
 };
