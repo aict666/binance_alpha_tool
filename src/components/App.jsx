@@ -199,6 +199,10 @@ const App = ({ currentLanguage }) => {
   const [maxBidOrder, setMaxBidOrder] = useState(null);
   // 卖单最大委托量信息 { price, quantity }
   const [maxAskOrder, setMaxAskOrder] = useState(null);
+  // 买卖比（夹子指数）
+  const [orderBookRatio, setOrderBookRatio] = useState(null);
+  const [bidTotal, setBidTotal] = useState(0);
+  const [askTotal, setAskTotal] = useState(0);
 
   // Helper for translations
   const t = (key) => translations[language][key];
@@ -285,6 +289,8 @@ const App = ({ currentLanguage }) => {
     try {
       let maxBid = { price: 0, quantity: 0 };
       let maxAsk = { price: 0, quantity: 0 };
+      let totalBid = 0;
+      let totalAsk = 0;
 
       // 解析卖单 (ask) - 找出卖单最大
       const askList = document.querySelector('.orderbook-ask');
@@ -297,6 +303,7 @@ const App = ({ currentLanguage }) => {
             const price = parseFloat(priceEl.innerText);
             if (currentPrice !== null && price === currentPrice) return;
             const qty = parseQuantityText(qtyEl.innerText);
+            totalAsk += qty;
             if (qty > maxAsk.quantity) {
               maxAsk = { price, quantity: qty };
             }
@@ -315,6 +322,7 @@ const App = ({ currentLanguage }) => {
             const price = parseFloat(priceEl.innerText);
             if (currentPrice !== null && price === currentPrice) return;
             const qty = parseQuantityText(qtyEl.innerText);
+            totalBid += qty;
             if (qty > maxBid.quantity) {
               maxBid = { price, quantity: qty };
             }
@@ -328,6 +336,11 @@ const App = ({ currentLanguage }) => {
       }
       if (maxAsk.quantity > 0) {
         setMaxAskOrder(maxAsk);
+      }
+      setBidTotal(totalBid);
+      setAskTotal(totalAsk);
+      if (totalAsk > 0) {
+        setOrderBookRatio(totalBid / totalAsk);
       }
     } catch (e) {
       console.error('[TradeAssist] 获取最大委托量失败:', e);
@@ -984,8 +997,8 @@ const App = ({ currentLanguage }) => {
             </div>
           )}
 
-          {/* 价差显示 */}
-          {maxBidOrder && maxAskOrder && (
+          {/* 价差显示 - 暂时隐藏 */}
+          {/* {maxBidOrder && maxAskOrder && (
             <div className="text-center text-xs text-gray-400 mb-1">
               <span>{language === 'zh' ? '价差' : 'Spread'}: </span>
               <span className="text-yellow-400 font-mono font-bold">
@@ -993,6 +1006,18 @@ const App = ({ currentLanguage }) => {
               </span>
               <span className="text-gray-500 ml-1">
                 ({((maxAskOrder.price - maxBidOrder.price) / maxBidOrder.price * 100).toFixed(2)}%)
+              </span>
+            </div>
+          )} */}
+          {/* 夹子指数 */}
+          {orderBookRatio !== null && (
+            <div className="text-center text-xs text-gray-400 mb-1">
+              <span>{language === 'zh' ? '夹子指数' : 'Clamp'}: </span>
+              <span className={`font-mono font-bold ${orderBookRatio >= 1.5 ? 'text-green-400' : orderBookRatio >= 0.8 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {orderBookRatio.toFixed(2)}
+              </span>
+              <span className="text-gray-500 ml-2">
+                ({language === 'zh' ? '买' : 'B'}: {formatToK(bidTotal)} / {language === 'zh' ? '卖' : 'S'}: {formatToK(askTotal)})
               </span>
             </div>
           )}
