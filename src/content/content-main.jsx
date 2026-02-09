@@ -79,6 +79,10 @@ function toggleFloatingWindow() {
 
 // 监听来自 background 的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'PING') {
+    sendResponse({ success: true, alive: true });
+    return true;
+  }
   if (request.type === 'TOGGLE_FLOATING_WINDOW') {
     toggleFloatingWindow();
     sendResponse({ success: true, visible: isVisible });

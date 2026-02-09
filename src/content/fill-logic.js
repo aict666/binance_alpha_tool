@@ -341,6 +341,166 @@ export async function executeQuickSell() {
   }
 }
 
+// 快速买入：单向快速买入，不勾选反向订单
+export async function executeQuickBuy(offsetTicks = 3, quantity) {
+  try {
+    console.log("[TradeAssist] 开始执行快速买入");
+
+    // Step 0: 确保"反向订单"是关闭的（单向买入不需要反向订单）
+    const reverseOrderContainer = Array.from(document.querySelectorAll('div'))
+      .find(div => div.textContent?.includes('反向订单'));
+
+    if (!reverseOrderContainer) {
+      return {
+        success: false,
+        message: '未找到"反向订单"选项，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_NOT_FOUND'
+      };
+    }
+
+    const reverseOrderCheckbox = reverseOrderContainer.querySelector('div[role="checkbox"]');
+
+    if (!reverseOrderCheckbox) {
+      return {
+        success: false,
+        message: '未找到"反向订单"复选框，请刷新页面后重试',
+        errorCode: 'REVERSE_ORDER_CHECKBOX_NOT_FOUND'
+      };
+    }
+
+    // 如果已勾选 → 自动取消勾选（快速买入是单向操作）
+    if (reverseOrderCheckbox.getAttribute('aria-checked') === 'true') {
+      console.log("[TradeAssist] 自动取消勾选反向订单");
+      reverseOrderCheckbox.click();
+
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 验证取消勾选是否成功
+      if (reverseOrderCheckbox.getAttribute('aria-checked') === 'true') {
+        return {
+          success: false,
+          message: '自动取消"反向订单"失败，请手动取消后重试',
+          errorCode: 'REVERSE_ORDER_AUTO_UNCHECK_FAILED'
+        };
+      }
+    }
+
+    // Step 1: 切换到买入Tab
+    const tabs = document.querySelectorAll('[role="tab"]');
+    const buyTab = Array.from(tabs).find(tab =>
+      tab.textContent?.includes('买入') || tab.textContent?.includes('Buy')
+    );
+
+    if (!buyTab) {
+      return {
+        success: false,
+        message: '未找到"买入"标签页',
+        errorCode: 'BUY_TAB_NOT_FOUND'
+      };
+    }
+
+    // 如果不在买入Tab，切换过去
+    if (buyTab.getAttribute('aria-selected') !== 'true') {
+      console.log("[TradeAssist] 切换到买入模式");
+      buyTab.click();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Step 2: 读取当前价格
+    const priceSpan = document.querySelector("#alphaOrderbook > div.orderlist-container > div.px-4.flex.items-center.justify-between > div:nth-child(1) > span");
+    if (!priceSpan) {
+      return {
+        success: false,
+        message: '未找到当前价格元素',
+        errorCode: 'PRICE_NOT_FOUND'
+      };
+    }
+
+    const currentPriceText = priceSpan.innerText.replace(/[^\d.]/g, '');
+    const currentPrice = parseFloat(currentPriceText);
+
+    if (isNaN(currentPrice)) {
+      return {
+        success: false,
+        message: '无法解析当前价格',
+        errorCode: 'PRICE_PARSE_ERROR'
+      };
+    }
+
+    console.log(`[TradeAssist] 当前价格: ${currentPrice}`);
+
+    // Step 3: 获取限价输入框和精度
+    const limitPriceInput = document.querySelector("#limitPrice");
+    if (!limitPriceInput) {
+      return {
+        success: false,
+        message: '未找到限价输入框',
+        errorCode: 'LIMIT_PRICE_INPUT_NOT_FOUND'
+      };
+    }
+
+    const stepAttr = limitPriceInput.getAttribute('step');
+    const stepValue = parseFloat(stepAttr);
+
+    if (isNaN(stepValue)) {
+      return {
+        success: false,
+        message: '无法获取价格步长',
+        errorCode: 'STEP_VALUE_ERROR'
+      };
+    }
+
+    // 计算精度
+    const precision = Math.abs(Math.floor(Math.log10(stepValue)));
+    const safePrecision = precision > 20 ? 8 : precision;
+
+    // Step 4: 计算买入价格 = 当前价格 + offsetTicks个tick（高于市价以快速成交）
+    const buyPrice = (currentPrice + stepValue * offsetTicks).toFixed(safePrecision);
+    console.log(`[TradeAssist] 买入价格: ${buyPrice} (步长: ${stepValue}, 偏移: ${offsetTicks}, 精度: ${safePrecision})`);
+
+    // 填充买入价格
+    setNativeValue(limitPriceInput, buyPrice);
+
+    // Step 5: 填充成交额输入框（快速买入填成交额，不是代币数量）
+    const limitTotalInput = document.querySelector("#limitTotal");
+    if (!limitTotalInput) {
+      return {
+        success: false,
+        message: '未找到成交额输入框',
+        errorCode: 'TOTAL_INPUT_NOT_FOUND'
+      };
+    }
+
+    setNativeValue(limitTotalInput, quantity.toString());
+    console.log(`[TradeAssist] 填充成交额: ${quantity}`);
+
+    // Step 6: 点击买入按钮
+    const buyBtn = document.querySelector('.bn-button.bn-button__buy');
+
+    if (!buyBtn) {
+      return {
+        success: false,
+        message: '未找到买入按钮',
+        errorCode: 'BUY_BUTTON_NOT_FOUND'
+      };
+    }
+
+    console.log("[TradeAssist] 点击买入按钮");
+    buyBtn.click();
+
+    return {
+      success: true,
+      message: '快速买入执行成功',
+      buyPrice: parseFloat(buyPrice)
+    };
+
+  } catch (error) {
+    console.error("[TradeAssist] 快速买入错误:", error);
+    return { success: false, message: error.message };
+  }
+}
+
 // 全部取消：切换到当前委托tab，点击全部取消
 export async function executeCancelAll() {
   try {
@@ -348,7 +508,7 @@ export async function executeCancelAll() {
 
     // Step 1: 切换到"当前委托"tab
     const openOrdersTab = document.querySelector('#bn-tab-orderOrder') ||
-                          document.querySelector('[data-tab-key="orderOrder"]');
+      document.querySelector('[data-tab-key="orderOrder"]');
 
     if (!openOrdersTab) {
       return {
@@ -509,7 +669,7 @@ export async function executeFillWithPrice(targetPrice, offsetTicks, quantity, a
       }
     }
 
-    return { success: true };
+    return { success: true, buyPrice: parseFloat(buyPrice) };
 
   } catch (error) {
     console.error("[TradeAssist] 指定价格填充错误:", error);

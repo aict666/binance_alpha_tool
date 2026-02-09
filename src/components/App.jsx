@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Cog6ToothIcon, PlusIcon, TrashIcon, BoltIcon, ChartBarIcon, CalculatorIcon, StarIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
-import { executeFill, executeQuickSell, executeFillWithPrice, executeCancelAll } from '../content/fill-logic';
+import { executeFill, executeQuickSell, executeQuickBuy, executeFillWithPrice, executeCancelAll } from '../content/fill-logic';
 import {
   collectOrdersFromTable,
   detectAirdrops,
@@ -65,6 +65,12 @@ const translations = {
     priceNotFound: '未找到当前价格',
     amountDivNotFound: '未找到持仓数量',
     sellButtonNotFound: '未找到卖出按钮',
+    // Quick buy
+    quickBuy: '快速买入',
+    quickBuyExecuting: '买入中...',
+    quickBuySuccess: '买入成功!',
+    buyButtonNotFound: '未找到买入按钮',
+    amountInputNotFound: '未找到数量输入框',
     // Cancel all
     cancelAll: '全部取消',
     cancelAllExecuting: '取消中...',
@@ -73,6 +79,17 @@ const translations = {
     cancelAllBtnNotFound: '未找到"全部取消"按钮',
     // Alpha listing
     alpha4xRemaining: '4x剩余{remain}天',
+    // Monitor
+    monitorConfirm: '是否监控此价位委托？',
+    monitorPrice: '价格',
+    monitorQty: '委托量',
+    monitorStart: '开始监控',
+    monitorCancel: '不需要',
+    monitorStop: '停止监控',
+    monitorActive: '监控中',
+    monitorAlertCancelled: '监控的委托已撤销！',
+    monitorAlertDecreased: '委托量减少！',
+    monitorDismiss: '知道了',
   },
   en: {
     title: 'Binance Alpha Assistant',
@@ -127,6 +144,12 @@ const translations = {
     priceNotFound: 'Price not found',
     amountDivNotFound: 'Holdings not found',
     sellButtonNotFound: 'Sell button not found',
+    // Quick buy
+    quickBuy: 'Quick Buy',
+    quickBuyExecuting: 'Buying...',
+    quickBuySuccess: 'Bought!',
+    buyButtonNotFound: 'Buy button not found',
+    amountInputNotFound: 'Amount input not found',
     // Cancel all
     cancelAll: 'Cancel All',
     cancelAllExecuting: 'Cancelling...',
@@ -135,6 +158,17 @@ const translations = {
     cancelAllBtnNotFound: 'Cancel All button not found',
     // Alpha listing
     alpha4xRemaining: '4x {remain}d left',
+    // Monitor
+    monitorConfirm: 'Monitor this price level?',
+    monitorPrice: 'Price',
+    monitorQty: 'Quantity',
+    monitorStart: 'Monitor',
+    monitorCancel: 'No',
+    monitorStop: 'Stop',
+    monitorActive: 'Monitoring',
+    monitorAlertCancelled: 'Monitored order cancelled!',
+    monitorAlertDecreased: 'Order quantity decreased!',
+    monitorDismiss: 'OK',
   }
 };
 
@@ -172,6 +206,7 @@ const App = ({ currentLanguage }) => {
   const [status, setStatus] = useState('');
   const statusTimerRef = useRef(null);
   const [quickSellStatus, setQuickSellStatus] = useState('');
+  const [quickBuyStatus, setQuickBuyStatus] = useState('');
   const [cancelAllStatus, setCancelAllStatus] = useState('');
 
   // Target score related state
@@ -203,6 +238,13 @@ const App = ({ currentLanguage }) => {
   const [orderBookRatio, setOrderBookRatio] = useState(null);
   const [bidTotal, setBidTotal] = useState(0);
   const [askTotal, setAskTotal] = useState(0);
+
+  // 委托监控状态
+  // monitoringOrder: { myPrice: 买入价, targetPrice: 跟随的委托价, targetQty: 跟随的委托量, side, myOrderFound: boolean }
+  const [monitoringOrder, setMonitoringOrder] = useState(null);
+  const [showMonitorConfirm, setShowMonitorConfirm] = useState(null); // { myPrice, targetPrice, targetQty, side }
+  const [monitorAlert, setMonitorAlert] = useState(null); // { type, oldQty, newQty, price }
+  const monitoringOrderRef = useRef(null);
 
   // Helper for translations
   const t = (key) => translations[language][key];
@@ -284,6 +326,50 @@ const App = ({ currentLanguage }) => {
     return num;
   }, []);
 
+  // 声音警报
+  const playAlertSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const playBeep = (time) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        osc.type = 'square';
+        gain.gain.value = 0.3;
+        osc.start(time);
+        osc.stop(time + 0.15);
+      };
+      playBeep(ctx.currentTime);
+      playBeep(ctx.currentTime + 0.25);
+      playBeep(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.error('[TradeAssist] 播放警报声失败:', e);
+    }
+  }, []);
+
+  // 触发监控警报
+  const triggerMonitorAlert = useCallback((alertInfo) => {
+    setMonitorAlert(alertInfo);
+    playAlertSound();
+    // Chrome 通知
+    try {
+      chrome.runtime.sendMessage({
+        type: 'SHOW_NOTIFICATION',
+        title: alertInfo.type === 'cancelled'
+          ? (language === 'zh' ? '委托已撤销！' : 'Order Cancelled!')
+          : (language === 'zh' ? '委托量减少！' : 'Order Decreased!'),
+        message: alertInfo.type === 'cancelled'
+          ? `${language === 'zh' ? '价格' : 'Price'}: ${alertInfo.price.toFixed(8)}`
+          : `${formatToK(alertInfo.oldQty)} → ${formatToK(alertInfo.newQty)}`
+      });
+    } catch (e) {
+      console.error('[TradeAssist] Chrome通知发送失败:', e);
+    }
+    // 不停止监控，持续监控直到用户手动取消
+  }, [language, playAlertSound]);
+
   // 获取订单簿中买单和卖单各自的最大委托量
   const fetchMaxOrder = useCallback(() => {
     try {
@@ -330,6 +416,53 @@ const App = ({ currentLanguage }) => {
         });
       }
 
+      // 监控检查：我的挂单可见时，检查大委托是否在后面2-3行
+      const monitoring = monitoringOrderRef.current;
+      if (monitoring && bidList) {
+        const allBidRows = bidList.querySelectorAll('.orderbook-progress');
+        const bidPrices = [];
+        allBidRows.forEach(row => {
+          const priceEl = row.querySelector('.bid-light.emit-price span');
+          const qtyEl = row.querySelector('.text.emit-price span');
+          if (priceEl && qtyEl) {
+            bidPrices.push({
+              price: parseFloat(priceEl.innerText),
+              qty: parseQuantityText(qtyEl.innerText)
+            });
+          }
+        });
+
+        const myIndex = bidPrices.findIndex(b => Math.abs(b.price - monitoring.myPrice) < 1e-12);
+
+        if (myIndex !== -1) {
+          // 更新 myOrderFound 状态（用于UI显示）
+          if (!monitoring.myOrderFound) {
+            monitoring.myOrderFound = true;
+            monitoringOrderRef.current = { ...monitoring };
+            setMonitoringOrder({ ...monitoring });
+          }
+
+          if (myIndex < bidPrices.length - 1) {
+            // 检查后面3行是否包含跟随的大委托
+            const lookAhead = bidPrices.slice(myIndex + 1, myIndex + 4);
+            const targetFound = lookAhead.some(b => Math.abs(b.price - monitoring.targetPrice) < 1e-12);
+
+            if (!targetFound && !monitoring.alerted) {
+              monitoring.alerted = true;
+              monitoringOrderRef.current = { ...monitoring };
+              setMonitoringOrder({ ...monitoring });
+              triggerMonitorAlert({ type: 'cancelled', price: monitoring.targetPrice, oldQty: monitoring.targetQty, newQty: 0 });
+            } else if (targetFound && monitoring.alerted) {
+              monitoring.alerted = false;
+              monitoringOrderRef.current = { ...monitoring };
+              setMonitoringOrder({ ...monitoring });
+            }
+          }
+          // myIndex 是最后一行 → 不检查
+        }
+        // myIndex === -1: 我的挂单不可见，不检查
+      }
+
       // 分别更新买单和卖单的最大委托
       if (maxBid.quantity > 0) {
         setMaxBidOrder(maxBid);
@@ -345,7 +478,7 @@ const App = ({ currentLanguage }) => {
     } catch (e) {
       console.error('[TradeAssist] 获取最大委托量失败:', e);
     }
-  }, [parseQuantityText, currentPrice]);
+  }, [parseQuantityText, currentPrice, triggerMonitorAlert]);
 
   // 实时刷新最大委托量（200ms）
   useEffect(() => {
@@ -590,6 +723,36 @@ const App = ({ currentLanguage }) => {
     }
   };
 
+  // 快速买入处理函数
+  const handleQuickBuy = async () => {
+    setQuickBuyStatus(t('quickBuyExecuting'));
+
+    try {
+      const result = await executeQuickBuy(offset, quantity);
+
+      if (result.success) {
+        setQuickBuyStatus(t('quickBuySuccess'));
+        setTimeout(() => setQuickBuyStatus(''), 2000);
+      } else {
+        // 映射错误码到翻译消息
+        const errorCodeMap = {
+          'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_CHECKBOX_NOT_FOUND': 'reverseOrderNotFound',
+          'REVERSE_ORDER_AUTO_UNCHECK_FAILED': 'reverseOrderAutoUncheckFailed',
+          'BUY_TAB_NOT_FOUND': 'buyTabNotFound',
+          'PRICE_NOT_FOUND': 'priceNotFound',
+          'TOTAL_INPUT_NOT_FOUND': 'amountInputNotFound',
+          'BUY_BUTTON_NOT_FOUND': 'buyButtonNotFound'
+        };
+        const errorKey = result.errorCode && errorCodeMap[result.errorCode];
+        setQuickBuyStatus(errorKey ? t(errorKey) : (result.message || t('failed')));
+      }
+    } catch (e) {
+      setQuickBuyStatus(t('failed'));
+      console.error(e);
+    }
+  };
+
   // 全部取消处理函数
   const handleCancelAll = async () => {
     setCancelAllStatus(t('cancelAllExecuting'));
@@ -636,6 +799,13 @@ const App = ({ currentLanguage }) => {
           ? `✓ ${sideLabel}最大 价:${priceStr} 量:${qtyStr}`
           : `✓ ${side.toUpperCase()} P:${priceStr} Q:${qtyStr}`);
         statusTimerRef.current = setTimeout(() => setStatus(''), 5000);
+        // 弹出监控确认（myPrice = 我的挂单价格，targetPrice = 跟随的大委托价格）
+        setShowMonitorConfirm({
+          myPrice: result.buyPrice,
+          targetPrice: orderInfo.price,
+          targetQty: orderInfo.quantity,
+          side
+        });
       } else {
         const errorCodeMap = {
           'REVERSE_ORDER_NOT_FOUND': 'reverseOrderNotFound',
@@ -942,17 +1112,30 @@ const App = ({ currentLanguage }) => {
             </button>
           </div>
 
-          {/* 全部取消按钮 */}
-          <button
-            onClick={handleCancelAll}
-            className="w-full flex items-center justify-center gap-2 text-white font-bold py-2 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 border border-gray-500 text-sm"
-          >
-            {t('cancelAll')}
-          </button>
+          {/* 快速买入 + 全部取消 */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* 快速买入按钮 */}
+            <button
+              onClick={handleQuickBuy}
+              className="flex items-center justify-center gap-2 text-white font-bold py-2.5 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-br from-green-600 to-teal-600 hover:from-green-500 hover:to-teal-500 shadow-green-900/20 text-sm"
+            >
+              <BoltIcon className="w-4 h-4" />
+              {t('quickBuy')}
+            </button>
 
-          {(status || quickSellStatus || cancelAllStatus) && (
+            {/* 全部取消按钮 */}
+            <button
+              onClick={handleCancelAll}
+              className="flex items-center justify-center gap-2 text-white font-bold py-2.5 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 border border-gray-500 text-sm"
+            >
+              {t('cancelAll')}
+            </button>
+          </div>
+
+          {(status || quickBuyStatus || quickSellStatus || cancelAllStatus) && (
             <div className="text-center text-[10px] font-mono font-bold truncate h-4 flex justify-center items-center gap-3">
               {status && <span className={status === t('success') ? 'text-green-400' : 'text-yellow-400'}>{status}</span>}
+              {quickBuyStatus && <span className={quickBuyStatus === t('quickBuySuccess') ? 'text-green-400' : 'text-yellow-400'}>{quickBuyStatus}</span>}
               {quickSellStatus && <span className={quickSellStatus === t('quickSellSuccess') ? 'text-green-400' : 'text-yellow-400'}>{quickSellStatus}</span>}
               {cancelAllStatus && <span className={cancelAllStatus === t('cancelAllSuccess') ? 'text-green-400' : 'text-yellow-400'}>{cancelAllStatus}</span>}
             </div>
@@ -1096,6 +1279,92 @@ const App = ({ currentLanguage }) => {
               </button>
             </div>
           </div>
+
+          {/* 监控确认弹窗 */}
+          {showMonitorConfirm && (
+            <div className="bg-yellow-900/40 border border-yellow-600 rounded-lg p-2 space-y-1.5">
+              <div className="text-[10px] text-yellow-300 font-bold text-center">{t('monitorConfirm')}</div>
+              <div className="text-[10px] text-gray-300 px-1 space-y-0.5">
+                <div className="flex justify-between">
+                  <span>{language === 'zh' ? '我的挂单' : 'My order'}: <span className="text-green-400 font-mono">{showMonitorConfirm.myPrice.toFixed(8)}</span></span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{language === 'zh' ? '跟随委托' : 'Target'}: <span className="text-white font-mono">{showMonitorConfirm.targetPrice.toFixed(8)}</span></span>
+                  <span>{t('monitorQty')}: <span className="text-yellow-400 font-mono">{formatToK(showMonitorConfirm.targetQty)}</span></span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const order = { ...showMonitorConfirm, myOrderFound: false, alerted: false };
+                    setMonitoringOrder(order);
+                    monitoringOrderRef.current = order;
+                    setShowMonitorConfirm(null);
+                  }}
+                  className="flex-1 bg-green-700 hover:bg-green-600 text-white text-[10px] font-bold py-1 rounded-lg transition-all"
+                >
+                  {t('monitorStart')}
+                </button>
+                <button
+                  onClick={() => setShowMonitorConfirm(null)}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] font-bold py-1 rounded-lg transition-all"
+                >
+                  {t('monitorCancel')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 监控中状态指示器 */}
+          {monitoringOrder && (
+            <div className="flex items-center justify-between bg-blue-900/40 border border-blue-600 rounded-lg px-2 py-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                <span className={`text-[10px] font-bold ${monitoringOrder.alerted ? 'text-red-300' : 'text-blue-300'}`}>
+                  {!monitoringOrder.myOrderFound
+                    ? (language === 'zh' ? '等待挂单...' : 'Waiting...')
+                    : monitoringOrder.alerted
+                      ? (language === 'zh' ? '已报警' : 'Alerted')
+                      : t('monitorActive')}
+                </span>
+                <span className="text-[10px] text-gray-400 font-mono">{monitoringOrder.targetPrice.toFixed(8)}</span>
+                <span className="text-[10px] text-yellow-400 font-mono">{formatToK(monitoringOrder.targetQty)}</span>
+              </div>
+              <button
+                onClick={() => { setMonitoringOrder(null); monitoringOrderRef.current = null; }}
+                className="text-[10px] text-red-400 hover:text-red-300 font-bold"
+              >
+                {t('monitorStop')}
+              </button>
+            </div>
+          )}
+
+          {/* 监控警报 */}
+          {monitorAlert && (
+            <div className="bg-red-900/60 border-2 border-red-500 rounded-lg p-2 space-y-1.5 animate-pulse">
+              <div className="text-xs text-red-300 font-bold text-center">
+                {monitorAlert.type === 'cancelled' ? t('monitorAlertCancelled') : t('monitorAlertDecreased')}
+              </div>
+              {monitorAlert.type === 'decreased' && (
+                <div className="text-[10px] text-center text-gray-300">
+                  {formatToK(monitorAlert.oldQty)} → <span className="text-red-400 font-bold">{formatToK(monitorAlert.newQty)}</span>
+                </div>
+              )}
+              <div className="text-[10px] text-center text-gray-400 font-mono">
+                {t('monitorPrice')}: {monitorAlert.price.toFixed(8)}
+              </div>
+              <button
+                onClick={() => setMonitorAlert(null)}
+                className="w-full bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold py-1 rounded-lg transition-all"
+              >
+                {t('monitorDismiss')}
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
       )}
