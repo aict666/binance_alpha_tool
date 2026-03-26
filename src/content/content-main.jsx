@@ -6,6 +6,7 @@ import cssText from '../index.css?inline';
 import './fill-logic.js';
 
 const CONTAINER_ID = 'binance-alpha-assistant-root';
+const VISIBILITY_STORAGE_KEY = 'tradeAssistFloatingWindowVisible';
 
 let isVisible = false;
 let root = null;
@@ -60,12 +61,14 @@ function renderApp(visible) {
 function showFloatingWindow() {
   isVisible = true;
   renderApp(true);
+  chrome.storage.local.set({ [VISIBILITY_STORAGE_KEY]: true });
 }
 
 // 隐藏悬浮窗
 function hideFloatingWindow() {
   isVisible = false;
   renderApp(false);
+  chrome.storage.local.set({ [VISIBILITY_STORAGE_KEY]: false });
 }
 
 // 切换显示状态
@@ -92,3 +95,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // 初始化
 console.log('[TradeAssist] Content script loaded');
+
+// 从存储中恢复可见性状态
+chrome.storage.local.get([VISIBILITY_STORAGE_KEY], (result) => {
+  if (result[VISIBILITY_STORAGE_KEY] === true) {
+    showFloatingWindow();
+    console.log('[TradeAssist] Restored floating window visibility');
+  }
+});

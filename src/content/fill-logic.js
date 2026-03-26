@@ -13,6 +13,10 @@ function setNativeValue(element, value) {
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function getReverseSellPriceInput() {
+  return document.querySelector('input#limitTotal[placeholder="限价卖单价格"]');
+}
+
 export async function executeFill(offsetTicks, quantity, autoSubmit = false) {
   try {
     // 0. 预检查: 验证"反向订单"复选框
@@ -80,7 +84,7 @@ export async function executeFill(offsetTicks, quantity, autoSubmit = false) {
     }
 
     // 预检查: 验证卖出价格输入框存在
-    const sellPriceInput = document.querySelector('input[placeholder="限价卖出"]');
+    const sellPriceInput = getReverseSellPriceInput();
     if (!sellPriceInput) {
       return {
         success: false,
@@ -610,7 +614,7 @@ export async function executeFillWithPrice(targetPrice, offsetTicks, quantity, a
     }
 
     // 预检查: 验证卖出价格输入框存在
-    const sellPriceInput = document.querySelector('input[placeholder="限价卖出"]');
+    const sellPriceInput = getReverseSellPriceInput();
     if (!sellPriceInput) {
       return {
         success: false,
