@@ -17,6 +17,140 @@ function getReverseSellPriceInput() {
   return document.querySelector('input#limitTotal[placeholder="限价卖单价格"]');
 }
 
+function getNodeText(node) {
+  return (node?.innerText || node?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function getNodeChildren(node) {
+  return Array.from(node?.children || []);
+}
+
+function getSearchRoot(scope = document) {
+  if (scope && scope !== document) {
+    return scope;
+  }
+
+  return document.body || document.documentElement || null;
+}
+
+function getDescendants(root) {
+  const searchRoot = getSearchRoot(root);
+
+  if (!searchRoot) {
+    return [];
+  }
+
+  const descendants = [];
+  const stack = [...getNodeChildren(searchRoot)];
+
+  while (stack.length > 0) {
+    const current = stack.shift();
+    descendants.push(current);
+    stack.unshift(...getNodeChildren(current));
+  }
+
+  return descendants;
+}
+
+function findCurrentPriceElement() {
+  const container = document.querySelector('.orderlist-container');
+  if (!container) {
+    return null;
+  }
+
+  return container.querySelector('.text-\\[20px\\]');
+}
+
+function parseAmountText(text) {
+  return text.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+}
+
+function isAvailableLabel(text) {
+  return /^(可用|Available)$/i.test(text);
+}
+
+function isSellButtonText(text) {
+  return /(卖出|sell)/i.test(text);
+}
+
+function hasNestedNumericText(node) {
+  return getDescendants(node).some(child => parseAmountText(getNodeText(child)));
+}
+
+function findQuickSellButton(scope = document) {
+  const searchRoot = getSearchRoot(scope);
+
+  if (!searchRoot) {
+    return null;
+  }
+
+  const buttonByClass = searchRoot.querySelector?.('.bn-button.bn-button__sell');
+  if (buttonByClass) {
+    return buttonByClass;
+  }
+
+  return getDescendants(searchRoot).find(node =>
+    node?.tagName?.toUpperCase() === 'BUTTON' && isSellButtonText(getNodeText(node))
+  ) || null;
+}
+
+function getQuickSellScope(limitPriceInput) {
+  let current = limitPriceInput?.parentElement || null;
+
+  while (current) {
+    if (current.querySelector?.('#limitAmount') || findQuickSellButton(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  return document;
+}
+
+function findAvailableAmountNode(scope = document) {
+  const searchRoot = getSearchRoot(scope);
+
+  if (!searchRoot) {
+    return null;
+  }
+
+  const allNodes = getDescendants(searchRoot);
+  const labelNode = allNodes.find(node => {
+    const text = getNodeText(node);
+    return isAvailableLabel(text) && !getDescendants(node).some(child => isAvailableLabel(getNodeText(child)));
+  });
+
+  if (!labelNode) {
+    return null;
+  }
+
+  let amountBlock = labelNode.parentElement;
+  while (amountBlock) {
+    if (parseAmountText(getNodeText(amountBlock))) {
+      break;
+    }
+
+    if (amountBlock === searchRoot) {
+      amountBlock = null;
+      break;
+    }
+
+    amountBlock = amountBlock.parentElement;
+  }
+
+  if (!amountBlock) {
+    return labelNode;
+  }
+
+  const amountCandidates = [amountBlock, ...getDescendants(amountBlock)].filter(node => {
+    const text = getNodeText(node);
+    return text && !isAvailableLabel(text) && parseAmountText(text);
+  });
+
+  const leafAmountNode = amountCandidates.find(node => !hasNestedNumericText(node));
+  return leafAmountNode || amountCandidates[0] || null;
+}
+
 export async function executeFill(offsetTicks, quantity, autoSubmit = false) {
   try {
     // 0. 预检查: 验证"反向订单"复选框
@@ -229,8 +363,8 @@ export async function executeQuickSell() {
     }
 
     // Step 2: 读取当前价格
-    const priceSpan = document.querySelector("#alphaOrderbook > div.orderlist-container > div.px-4.flex.items-center.justify-between > div:nth-child(1) > span");
-    if (!priceSpan) {
+    const priceEl = findCurrentPriceElement();
+    if (!priceEl) {
       return {
         success: false,
         message: '未找到当前价格元素',
@@ -238,7 +372,7 @@ export async function executeQuickSell() {
       };
     }
 
-    const currentPriceText = priceSpan.innerText.replace(/[^\d.]/g, '');
+    const currentPriceText = priceEl.innerText.replace(/[^\d.]/g, '');
     const currentPrice = parseFloat(currentPriceText);
 
     if (isNaN(currentPrice)) {
@@ -275,6 +409,7 @@ export async function executeQuickSell() {
     // 计算精度
     const precision = Math.abs(Math.floor(Math.log10(stepValue)));
     const safePrecision = precision > 20 ? 8 : precision;
+    const quickSellScope = getQuickSellScope(limitPriceInput);
 
     // 计算卖出价格 = 当前价格 - 3个tick
     const sellPrice = (currentPrice - stepValue * 3).toFixed(safePrecision);
@@ -284,7 +419,7 @@ export async function executeQuickSell() {
     setNativeValue(limitPriceInput, sellPrice);
 
     // Step 4: 读取持仓数量
-    const amountDiv = document.querySelector("#__APP > div > div.bg-TradeBg.md\\:pt-\\[4px\\].h-\\[1097px\\].relative.flex-layout-container > div > div:nth-child(9) > div > div > div > div > div.bn-flex.h-auto.md\\:h-\\[310px\\].flex-col.justify-start.gap-y-\\[8px\\].mt-\\[8px\\] > div.flex.flex-col.gap-\\[10px\\] > div.bn-flex.flex.flex-col.gap-\\[4px\\] > div.bn-flex.space-x-\\[4px\\].py-\\[2px\\].items-center > div > div > div > div.bn-flex.gap-\\[4px\\].items-center > div");
+    const amountDiv = findAvailableAmountNode(quickSellScope);
 
     if (!amountDiv) {
       return {
@@ -295,7 +430,7 @@ export async function executeQuickSell() {
     }
 
     const amountText = amountDiv.innerText; // 例如 "5,930.37 OWL"
-    const amountMatch = amountText.replace(/,/g, '').match(/[\d.]+/);
+    const amountMatch = parseAmountText(amountText);
 
     if (!amountMatch) {
       return {
@@ -321,7 +456,7 @@ export async function executeQuickSell() {
     setNativeValue(limitAmountInput, amount);
 
     // Step 6: 点击卖出按钮
-    const sellBtn = document.querySelector("#__APP > div > div.bg-TradeBg.md\\:pt-\\[4px\\].h-\\[1097px\\].relative.flex-layout-container > div > div:nth-child(9) > div > div > div > div > div.bn-flex.h-auto.md\\:h-\\[310px\\].flex-col.justify-start.gap-y-\\[8px\\].mt-\\[8px\\] > div.flex.flex-col.gap-\\[10px\\] > button");
+    const sellBtn = findQuickSellButton(quickSellScope);
 
     if (!sellBtn) {
       return {
